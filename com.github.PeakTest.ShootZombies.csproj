@@ -1,0 +1,185 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" Condition="Exists('$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props')" />
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{927916CE-8113-4CE1-A65E-D4BD77E780B4}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <RootNamespace>ShootZombies</RootNamespace>
+    <AssemblyName>Thanks.ShootZombies</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <FileAlignment>512</FileAlignment>
+    <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <Deterministic>true</Deterministic>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <PlatformTarget>AnyCPU</PlatformTarget>
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>bin\Release\</OutputPath>
+    <DefineConstants>TRACE</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="0Harmony">
+      <HintPath>libs\0Harmony.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Assembly-CSharp">
+      <HintPath>libs\Assembly-CSharp.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="BepInEx">
+      <HintPath>libs\BepInEx.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PhotonRealtime">
+      <HintPath>libs\PhotonRealtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Photon3Unity3D">
+      <HintPath>libs\Photon3Unity3D.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PhotonUnityNetworking">
+      <HintPath>libs\PhotonUnityNetworking.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="UnityEngine">
+      <HintPath>libs\UnityEngine.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>libs\UnityEngine.CoreModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.PhysicsModule">
+      <HintPath>libs\UnityEngine.PhysicsModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AudioModule">
+      <HintPath>libs\UnityEngine.AudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule">
+      <HintPath>libs\UnityEngine.AssetBundleModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputModule">
+      <HintPath>libs\UnityEngine.InputModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.InputLegacyModule">
+      <HintPath>libs\UnityEngine.InputLegacyModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UI">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.UI.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UIModule">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.UIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.IMGUIModule">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.IMGUIModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.TextRenderingModule">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.TextRenderingModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestModule">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.UnityWebRequestModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="UnityEngine.UnityWebRequestAudioModule">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\UnityEngine.UnityWebRequestAudioModule.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Unity.TextMeshPro">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\Unity.TextMeshPro.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="PEAKLib.Core">
+      <HintPath>libs\com.github.PEAKModding.PEAKLib.Core.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Zorro.Core.Runtime">
+      <HintPath>D:\Steam\steamapps\common\PEAK\PEAK_Data\Managed\Zorro.Core.Runtime.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+  </ItemGroup>
+  <ItemGroup>
+    <Compile Include="Thanks_ShootZombies\AkLightweightAssetLoader.cs" />
+    <Compile Include="Thanks_ShootZombies\AkHeldLegacyVisualMarker.cs" />
+    <Compile Include="Thanks_ShootZombies\AkInPlaceMarker.cs" />
+    <Compile Include="Thanks_ShootZombies\AkLocalVisualMarker.cs" />
+    <Compile Include="Thanks_ShootZombies\AkMuzzleMarker.cs" />
+    <Compile Include="Thanks_ShootZombies\AkSimpleVisualMarker.cs" />
+    <Compile Include="Thanks_ShootZombies\AkUiPatchHelpers.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelCookColorPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelSetItemIconPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelSharedInitPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelSliceCookColorPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelSlicePatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BackpackWheelStashSlicePatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BlowgunChargeSoundPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BlowgunInfiniteUsePatch.cs" />
+    <Compile Include="Thanks_ShootZombies\BlowgunWreckPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\DartImpactPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\DisableZombieSleepPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\GlobalAliases.cs" />
+    <Compile Include="Thanks_ShootZombies\HideUseItemProgressPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\InventoryItemUiCookColorPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\InventoryItemUiNamePatch.cs" />
+    <Compile Include="Thanks_ShootZombies\InventoryItemUiPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\ItemPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\ItemSlotSetItemPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\ItemUIDataPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\LobbyConfigPanel.cs" />
+    <Compile Include="Thanks_ShootZombies\Plugin.cs" />
+    <Compile Include="Thanks_ShootZombies\SuppressOriginalBlowgunFirePatch.cs" />
+    <Compile Include="Thanks_ShootZombies\ZombieDeathPatch.cs" />
+    <Compile Include="Thanks_ShootZombies\ZombieSpawner.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="AK_Sounds\ak_sound1.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>AK_Sounds\ak_sound1.wav</TargetPath>
+    </None>
+    <None Include="AK_Sounds\ak_sound2.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>AK_Sounds\ak_sound2.wav</TargetPath>
+    </None>
+    <None Include="AK_Sounds\ak_sound3.wav">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <TargetPath>AK_Sounds\ak_sound3.wav</TargetPath>
+    </None>
+  </ItemGroup>
+  <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Target Name="AfterBuild">
+    <Copy SourceFiles="AK_Bundle\Weapons_shootzombies.bundle" DestinationFiles="$(OutputPath)Weapons_shootzombies.bundle" SkipUnchangedFiles="false" />
+    <RemoveDir Directories="$(OutputPath)AK_Resources" Condition="Exists('$(OutputPath)AK_Resources')" />
+    <RemoveDir Directories="$(OutputPath)bin" Condition="Exists('$(OutputPath)bin')" />
+  </Target>
+</Project>

@@ -1,0 +1,14 @@
+.vs/
+bin/
+obj/
+temp_ilspy/
+.dotnet/
+.dotnet-home/
+.localappdata/
+.tools/
+*.user
+*.suo
+*.wsuo
+*.vsidx
+*.cache
+*.pdb

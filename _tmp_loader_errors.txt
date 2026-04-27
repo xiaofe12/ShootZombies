@@ -1,0 +1,9 @@
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
+Non-abstract, non-.cctor method in an interface.
