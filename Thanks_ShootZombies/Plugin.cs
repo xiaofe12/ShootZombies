@@ -274,6 +274,12 @@ public class Plugin : BaseUnityPlugin
 
 	private const string ConfigMetadataZombieDifficultyPrefix = "## ShootZombiesZombieDifficulty: ";
 
+	private const string FeaturesConfigSectionName = "Features";
+
+	private const string WeaponConfigSectionName = "Weapon";
+
+	private const string ZombieConfigSectionName = "Zombie";
+
 	private static HashSet<int> _receivedItem = new HashSet<int>();
 
 	private static HashSet<int> _persistentReceivedItem = new HashSet<int>();
@@ -388,9 +394,15 @@ public class Plugin : BaseUnityPlugin
 
 	private static readonly string[] AkSoundSelectionValues = new string[3] { "ak_sound1", "ak_sound2", "ak_sound3" };
 
+	private const string DefaultConfigPanelThemeOption = "dark";
+
+	private static readonly string[] ConfigPanelThemeValues = new string[3] { "dark", "light", "transparent" };
+
 	private const string DefaultWeaponSelection = "AK47";
 
 	private const string PlayerWeaponSelectionPropertyKey = "sz.weapon";
+
+	private const string PlayerAkSoundSelectionPropertyKey = "sz.sound";
 
 	private static readonly string[] WeaponSelectionValues = new string[3] { "AK47", "MPX", "HK416" };
 
@@ -480,6 +492,8 @@ public class Plugin : BaseUnityPlugin
 	private static readonly Dictionary<string, Texture2D> _resolvedWeaponIcons = new Dictionary<string, Texture2D>(StringComparer.OrdinalIgnoreCase);
 
 	private static readonly Dictionary<int, string> _playerWeaponSelectionsByActor = new Dictionary<int, string>();
+
+	private static readonly Dictionary<int, string> _playerAkSoundSelectionsByActor = new Dictionary<int, string>();
 
 	private static readonly List<GameObject> _runtimeWeaponPrefabClones = new List<GameObject>();
 
@@ -809,6 +823,8 @@ public class Plugin : BaseUnityPlugin
 
 	private string _lastPublishedLocalWeaponSelection = string.Empty;
 
+	private string _lastPublishedLocalAkSoundSelection = string.Empty;
+
 	private float _lastWeaponModelPitch;
 
 	private float _lastWeaponModelYaw;
@@ -865,6 +881,8 @@ public class Plugin : BaseUnityPlugin
 
 	private ConfigFile _pluginConfig;
 
+	private string _pluginConfigPath = string.Empty;
+
 	private readonly Dictionary<ConfigEntryBase, Delegate> _observedConfigEntries = new Dictionary<ConfigEntryBase, Delegate>();
 
 	private RoomConfigCallbackProxy _roomConfigCallbackProxy;
@@ -881,11 +899,15 @@ public class Plugin : BaseUnityPlugin
 
 	private static readonly HashSet<ConfigEntryBase> _ownedConfigEntries = new HashSet<ConfigEntryBase>();
 
+	private static readonly bool DisableModConfigRuntimePatches = true;
+
 	private bool _repairingModConfigUi;
 
 	private string _activeModConfigName = string.Empty;
 
 	private Coroutine _modConfigStabilizeCoroutine;
+
+	private string _modConfigStabilizeOwnerName = string.Empty;
 
 	private static float _lastZombieSpeedUpdateTime = 0f;
 
@@ -944,6 +966,8 @@ public class Plugin : BaseUnityPlugin
 	public static ConfigEntry<KeyCode> SpawnWeaponKey { get; private set; }
 
 	public static ConfigEntry<KeyCode> OpenConfigPanelKey { get; private set; }
+
+	public static ConfigEntry<string> ConfigPanelTheme { get; private set; }
 
 	public static ConfigEntry<bool> ModEnabled { get; private set; }
 
@@ -1137,7 +1161,7 @@ public class Plugin : BaseUnityPlugin
 		try
 		{
 			bool flag = IsChineseLanguage();
-			PrepareCanonicalConfigFile();
+			PreparePrimaryConfigFile();
 			InitializePluginConfig();
 			_loadedZombieBehaviorDifficultyMetadata = ReadStoredZombieBehaviorDifficultySelection();
 			InitConfig();
@@ -1152,7 +1176,10 @@ public class Plugin : BaseUnityPlugin
 			Harmony val = new Harmony("com.github.Thanks.ShootZombies");
 			val.PatchAll(Assembly.GetExecutingAssembly());
 			PatchUpdatedRunMethods(val);
-			PatchModConfigUiMethods(val);
+			if (!DisableModConfigRuntimePatches)
+			{
+				PatchModConfigUiMethods(val);
+			}
 			InitializeRoomConfigCallbacks();
 			SceneManager.sceneLoaded += OnSceneLoaded;
 			((MonoBehaviour)this).StartCoroutine(DeferredInitialLocalizationRefresh());
@@ -1171,6 +1198,7 @@ public class Plugin : BaseUnityPlugin
 			if (string.IsNullOrWhiteSpace(canonicalConfigPath))
 			{
 				_pluginConfig = ((BaseUnityPlugin)this).Config;
+				_pluginConfigPath = GetConfigFilePath(_pluginConfig);
 				return;
 			}
 			string directoryName = Path.GetDirectoryName(canonicalConfigPath);
@@ -1185,10 +1213,16 @@ public class Plugin : BaseUnityPlugin
 				throw new MissingFieldException("BepInEx.BaseUnityPlugin", "<Config>k__BackingField");
 			}
 			fieldInfo.SetValue(this, _pluginConfig);
+			_pluginConfigPath = GetConfigFilePath(_pluginConfig);
+			if (string.IsNullOrWhiteSpace(_pluginConfigPath))
+			{
+				_pluginConfigPath = canonicalConfigPath;
+			}
 		}
 		catch (Exception ex)
 		{
 			_pluginConfig = ((BaseUnityPlugin)this).Config;
+			_pluginConfigPath = GetConfigFilePath(_pluginConfig);
 			Log.LogWarning((object)("[ShootZombies] InitializePluginConfig failed, falling back to default config routing: " + DescribeReflectionException(ex)));
 		}
 	}
@@ -3050,6 +3084,22 @@ public class Plugin : BaseUnityPlugin
 		return ((BaseUnityPlugin)this).Config.Bind<int>(section, key, defaultValue, new ConfigDescription(GetLocalizedDescription(key, isChinese: false), (AcceptableValueBase)(object)new AcceptableValueRange<int>(minValue, maxValue), Array.Empty<object>()));
 	}
 
+	private static string GetConfigBindingSectionName(string canonicalSection, bool isChinese)
+	{
+		string localizedSectionName = GetLocalizedSectionName(canonicalSection, isChinese);
+		return string.IsNullOrWhiteSpace(localizedSectionName) ? canonicalSection : localizedSectionName;
+	}
+
+	private static string GetConfigBindingKeyName(string canonicalKey, bool isChinese)
+	{
+		if (!isChinese)
+		{
+			return canonicalKey;
+		}
+		string localizedKeyName = GetLocalizedKeyName(canonicalKey, isChinese);
+		return string.IsNullOrWhiteSpace(localizedKeyName) ? canonicalKey : localizedKeyName;
+	}
+
 	private static void NormalizeConfigRanges()
 	{
 		if (ZombieBehaviorDifficulty != null)
@@ -3076,20 +3126,31 @@ public class Plugin : BaseUnityPlugin
 	{
 		// é…ç½®é”®åä¿æŒç¨³å®šå¹¶é›†ä¸­åœ¨è¿™é‡Œå®šä¹‰ï¼Œä¾¿äºŽè¿ç§»æ—§é…ç½®æ–‡ä»¶ã€‚
 		// Keep config keys centralized here so legacy config migration stays predictable.
-		ModEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>("Features", "Mod", true, GetLocalizedDescription("Mod", isChinese: false));
-		OpenConfigPanelKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>("Features", "Open Config Panel", KeyCode.Backslash, GetLocalizedDescription("Open Config Panel", isChinese: false));
-		WeaponEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>("Weapon", "Weapon", true, GetLocalizedDescription("Weapon", isChinese: false));
-		WeaponSelection = ((BaseUnityPlugin)this).Config.Bind<string>("Weapon", "Weapon Selection", DefaultWeaponSelection, new ConfigDescription(GetLocalizedDescription("Weapon Selection", isChinese: false), (AcceptableValueBase)(object)new AcceptableValueList<string>(WeaponSelectionValues), Array.Empty<object>()));
+		bool isChinese = IsChineseLanguage();
+		string configBindingSectionName = GetConfigBindingSectionName(FeaturesConfigSectionName, isChinese);
+		string configBindingSectionName2 = GetConfigBindingSectionName(WeaponConfigSectionName, isChinese);
+		string configBindingSectionName3 = GetConfigBindingSectionName(ZombieConfigSectionName, isChinese);
+		ModEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>(configBindingSectionName, GetConfigBindingKeyName("Mod", isChinese), true, GetLocalizedDescription("Mod", isChinese: false));
+		OpenConfigPanelKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>(configBindingSectionName, GetConfigBindingKeyName("Open Config Panel", isChinese), KeyCode.Backslash, GetLocalizedDescription("Open Config Panel", isChinese: false));
+		ConfigPanelTheme = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName, GetConfigBindingKeyName("Config Panel Theme", isChinese), DefaultConfigPanelThemeOption, GetLocalizedDescription("Config Panel Theme", isChinese: false));
+		string text0 = LobbyConfigPanel.NormalizeThemeSelectionValue(ConfigPanelTheme.Value);
+		if (!string.Equals(ConfigPanelTheme.Value, text0, StringComparison.Ordinal))
+		{
+			ConfigPanelTheme.Value = text0;
+			SavePluginConfigQuietly();
+		}
+		WeaponEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>(configBindingSectionName2, GetConfigBindingKeyName("Weapon", isChinese), true, GetLocalizedDescription("Weapon", isChinese: false));
+		WeaponSelection = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName2, GetConfigBindingKeyName("Weapon Selection", isChinese), DefaultWeaponSelection, GetLocalizedDescription("Weapon Selection", isChinese: false));
 		string text = NormalizeWeaponSelection(WeaponSelection.Value);
 		if (!string.Equals(WeaponSelection.Value, text, StringComparison.Ordinal))
 		{
 			WeaponSelection.Value = text;
 			SavePluginConfigQuietly();
 		}
-		SpawnWeaponKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>("Weapon", "Spawn Weapon", (KeyCode)116, GetLocalizedDescription("Spawn Weapon", isChinese: false));
-		FireInterval = BindRangedFloat("Weapon", "Fire Interval", 0.4f, 0.1f, 3f);
-		FireVolume = BindRangedFloat("Weapon", "Fire Volume", 0.8f, 0f, 1.5f);
-		AkSoundSelection = ((BaseUnityPlugin)this).Config.Bind<string>("Weapon", "AK Sound", DefaultAkSoundOption, new ConfigDescription(GetLocalizedDescription("AK Sound", isChinese: false), (AcceptableValueBase)(object)new AcceptableValueList<string>(AkSoundSelectionValues), Array.Empty<object>()));
+		SpawnWeaponKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>(configBindingSectionName2, GetConfigBindingKeyName("Spawn Weapon", isChinese), (KeyCode)116, GetLocalizedDescription("Spawn Weapon", isChinese: false));
+		FireInterval = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Fire Interval", isChinese), 0.4f, 0.1f, 3f);
+		FireVolume = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Fire Volume", isChinese), 0.8f, 0f, 1.5f);
+		AkSoundSelection = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName2, GetConfigBindingKeyName("AK Sound", isChinese), DefaultAkSoundOption, GetLocalizedDescription("AK Sound", isChinese: false));
 		string text2 = NormalizeAkSoundSelection(AkSoundSelection.Value);
 		if (!string.Equals(AkSoundSelection.Value, text2, StringComparison.Ordinal))
 		{
@@ -3100,14 +3161,14 @@ public class Plugin : BaseUnityPlugin
 		{
 			OnAkSoundSelectionChanged();
 		};
-		ZombieTimeReduction = BindRangedFloat("Weapon", "Zombie Time Reduction", DefaultZombieTimeReductionSeconds, 0f, 60f);
-		WeaponModelScale = BindRangedFloat("Weapon", "Weapon Model Scale", _localWeaponModelScale.x, 0.3f, 2f);
-		WeaponModelPitch = BindRangedFloat("Features", "Weapon Model X Rotation", _localWeaponModelEuler.x, -180f, 180f);
-		WeaponModelYaw = BindRangedFloat("Features", "Weapon Model Y Rotation", _localWeaponModelEuler.y, -180f, 180f);
-		WeaponModelRoll = BindRangedFloat("Features", "Weapon Model Z Rotation", _localWeaponModelEuler.z, -180f, 180f);
-		WeaponModelOffsetX = BindRangedFloat("Features", "Weapon Model X Position", _localWeaponModelOffset.x, -0.5f, 0.5f);
-		WeaponModelOffsetY = BindRangedFloat("Features", "Weapon Model Y Position", _localWeaponModelOffset.y, -0.5f, 0.5f);
-		WeaponModelOffsetZ = BindRangedFloat("Features", "Weapon Model Z Position", _localWeaponModelOffset.z, -0.5f, 0.5f);
+		ZombieTimeReduction = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Zombie Time Reduction", isChinese), DefaultZombieTimeReductionSeconds, 0f, 60f);
+		WeaponModelScale = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Weapon Model Scale", isChinese), _localWeaponModelScale.x, 0.3f, 2f);
+		WeaponModelPitch = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model X Rotation", isChinese), _localWeaponModelEuler.x, -180f, 180f);
+		WeaponModelYaw = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model Y Rotation", isChinese), _localWeaponModelEuler.y, -180f, 180f);
+		WeaponModelRoll = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model Z Rotation", isChinese), _localWeaponModelEuler.z, -180f, 180f);
+		WeaponModelOffsetX = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model X Position", isChinese), _localWeaponModelOffset.x, -0.5f, 0.5f);
+		WeaponModelOffsetY = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model Y Position", isChinese), _localWeaponModelOffset.y, -0.5f, 0.5f);
+		WeaponModelOffsetZ = BindRangedFloat(configBindingSectionName, GetConfigBindingKeyName("Weapon Model Z Position", isChinese), _localWeaponModelOffset.z, -0.5f, 0.5f);
 		if (Mathf.Abs(WeaponModelYaw.Value - 10f) < 0.001f || Mathf.Abs(WeaponModelYaw.Value - 11.5f) < 0.001f || Mathf.Abs(WeaponModelYaw.Value - -4f) < 0.001f)
 		{
 			WeaponModelYaw.Value = _localWeaponModelEuler.y;
@@ -3125,11 +3186,11 @@ public class Plugin : BaseUnityPlugin
 			WeaponModelOffsetZ.Value = _localWeaponModelOffset.z;
 			SavePluginConfigQuietly();
 		}
-		MaxZombies = BindRangedInt("Zombie", "Max Count", DefaultMaxZombieCount, 0, 30);
-		ZombieSpawnCount = BindRangedInt("Zombie", "Spawn Count", DefaultZombieSpawnCount, 0, 30);
-		ZombieSpawnInterval = BindRangedFloat("Zombie", "Spawn Interval", 15f, 1f, 120f);
-		ZombieMaxLifetime = BindRangedFloat("Zombie", "Max Lifetime", 120f, 10f, 600f);
-		ZombieBehaviorDifficulty = ((BaseUnityPlugin)this).Config.Bind<string>("Zombie", "Behavior Difficulty", DefaultZombieBehaviorDifficulty, new ConfigDescription(GetLocalizedDescription("Behavior Difficulty", isChinese: false), (AcceptableValueBase)(object)new AcceptableValueList<string>(ZombieBehaviorDifficultyValues), Array.Empty<object>()));
+		MaxZombies = BindRangedInt(configBindingSectionName3, GetConfigBindingKeyName("Max Count", isChinese), DefaultMaxZombieCount, 0, 30);
+		ZombieSpawnCount = BindRangedInt(configBindingSectionName3, GetConfigBindingKeyName("Spawn Count", isChinese), DefaultZombieSpawnCount, 0, 30);
+		ZombieSpawnInterval = BindRangedFloat(configBindingSectionName3, GetConfigBindingKeyName("Spawn Interval", isChinese), 15f, 1f, 120f);
+		ZombieMaxLifetime = BindRangedFloat(configBindingSectionName3, GetConfigBindingKeyName("Max Lifetime", isChinese), 120f, 10f, 600f);
+		ZombieBehaviorDifficulty = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName3, GetConfigBindingKeyName("Behavior Difficulty", isChinese), DefaultZombieBehaviorDifficulty, GetLocalizedDescription("Behavior Difficulty", isChinese: false));
 		string text3 = NormalizeZombieBehaviorDifficultySelection(string.IsNullOrWhiteSpace(_loadedZombieBehaviorDifficultyMetadata) ? ZombieBehaviorDifficulty.Value : _loadedZombieBehaviorDifficultyMetadata);
 		if (!string.Equals(ZombieBehaviorDifficulty.Value, text3, StringComparison.Ordinal))
 		{
@@ -3145,6 +3206,7 @@ public class Plugin : BaseUnityPlugin
 		RemoveLegacyRecoilConfig();
 		RefreshOwnedConfigEntryCache();
 		SubscribeOwnedConfigEntryChanges();
+		SavePluginConfigQuietly();
 	}
 
 	private void OnDestroy()
@@ -3153,11 +3215,7 @@ public class Plugin : BaseUnityPlugin
 		ReleaseRoomConfigCallbacks();
 		UnsubscribeOwnedConfigEntryChanges();
 		StopGameplayLoadoutBootstrap();
-		if (_modConfigStabilizeCoroutine != null)
-		{
-			((MonoBehaviour)this).StopCoroutine(_modConfigStabilizeCoroutine);
-			_modConfigStabilizeCoroutine = null;
-		}
+		StopOwnedModConfigStabilizer();
 		CleanupLocalHeldDebugSphere();
 		CleanupMuzzleFlashPool();
 		CleanupRemoteGunshotAudioPool();
@@ -4473,6 +4531,11 @@ public class Plugin : BaseUnityPlugin
 		return NormalizeWeaponSelection(WeaponSelection?.Value);
 	}
 
+	public static string GetCurrentAkSoundSelection()
+	{
+		return NormalizeAkSoundSelection(AkSoundSelection?.Value);
+	}
+
 	public static string GetCurrentWeaponDisplayName()
 	{
 		return GetWeaponDisplayName(GetCurrentWeaponSelection());
@@ -4488,6 +4551,19 @@ public class Plugin : BaseUnityPlugin
 		}
 		selection = GetCurrentWeaponSelection();
 		_playerWeaponSelectionsByActor[actorNr] = selection;
+		return true;
+	}
+
+	private static bool TryGetLocalPlayerAkSoundSelectionOverride(int actorNr, out string selection)
+	{
+		selection = null;
+		RoomPlayer localPlayer = PhotonNetwork.LocalPlayer;
+		if (actorNr <= 0 || localPlayer == null || localPlayer.ActorNumber != actorNr)
+		{
+			return false;
+		}
+		selection = GetCurrentAkSoundSelection();
+		_playerAkSoundSelectionsByActor[actorNr] = selection;
 		return true;
 	}
 
@@ -4512,6 +4588,27 @@ public class Plugin : BaseUnityPlugin
 		return GetCurrentWeaponSelection();
 	}
 
+	internal static string GetAkSoundSelectionForActor(int actorNr)
+	{
+		if (TryGetLocalPlayerAkSoundSelectionOverride(actorNr, out var selection))
+		{
+			return selection;
+		}
+		if (actorNr > 0 && _playerAkSoundSelectionsByActor.TryGetValue(actorNr, out var value))
+		{
+			return NormalizeAkSoundSelection(value);
+		}
+		if (PhotonNetwork.InRoom)
+		{
+			RoomPlayer player = PhotonNetwork.PlayerList?.FirstOrDefault((RoomPlayer candidate) => candidate != null && candidate.ActorNumber == actorNr);
+			if (player != null)
+			{
+				return GetAkSoundSelectionForPlayer(player);
+			}
+		}
+		return GetCurrentAkSoundSelection();
+	}
+
 	internal static string GetWeaponSelectionForPlayer(RoomPlayer player)
 	{
 		if (player == null)
@@ -4527,6 +4624,25 @@ public class Plugin : BaseUnityPlugin
 		if (player.ActorNumber > 0)
 		{
 			_playerWeaponSelectionsByActor[player.ActorNumber] = text;
+		}
+		return text;
+	}
+
+	internal static string GetAkSoundSelectionForPlayer(RoomPlayer player)
+	{
+		if (player == null)
+		{
+			return GetCurrentAkSoundSelection();
+		}
+		if (TryGetLocalPlayerAkSoundSelectionOverride(player.ActorNumber, out var selection))
+		{
+			return selection;
+		}
+		object obj = (player.CustomProperties != null) ? player.CustomProperties[(object)PlayerAkSoundSelectionPropertyKey] : null;
+		string text = NormalizeAkSoundSelection(obj as string);
+		if (player.ActorNumber > 0)
+		{
+			_playerAkSoundSelectionsByActor[player.ActorNumber] = text;
 		}
 		return text;
 	}
@@ -4955,20 +5071,20 @@ public class Plugin : BaseUnityPlugin
 
 	private void OnAkSoundSelectionChanged()
 	{
-		if (AkSoundSelection != null)
+		if (AkSoundSelection == null)
 		{
-			string text = NormalizeAkSoundSelection(AkSoundSelection.Value);
-			if (!string.Equals(AkSoundSelection.Value, text, StringComparison.Ordinal))
-			{
-				AkSoundSelection.Value = text;
-				SavePluginConfigQuietly();
-			}
-			else
-			{
-				SavePluginConfigQuietly();
-				ApplySelectedGunshotSound();
-			}
+			return;
 		}
+		string text = NormalizeAkSoundSelection(AkSoundSelection.Value);
+		if (!string.Equals(AkSoundSelection.Value, text, StringComparison.Ordinal))
+		{
+			AkSoundSelection.Value = text;
+			SavePluginConfigQuietly();
+			return;
+		}
+		SavePluginConfigQuietly();
+		ApplySelectedGunshotSound();
+		PublishLocalAkSoundSelectionToPlayerProperties(force: true);
 	}
 
 	private void SavePluginConfigQuietly()
@@ -4981,6 +5097,11 @@ public class Plugin : BaseUnityPlugin
 		catch
 		{
 		}
+	}
+
+	internal void SaveOwnedConfigRuntime()
+	{
+		SavePluginConfigQuietly();
 	}
 
 	private void ApplySelectedGunshotSound()
@@ -6788,9 +6909,18 @@ public class Plugin : BaseUnityPlugin
 		}
 		string selection = ((payload.Length >= 7 && payload[6] is string text) ? text : null);
 		Character character = ResolveCharacterFromPhotonViewId(shooterViewId);
+		PhotonView val = ((Object)character != (Object)null) ? (character.refs?.view) : null;
+		if ((Object)val == (Object)null)
+		{
+			val = PhotonView.Find(shooterViewId);
+		}
 		if ((Object)character != (Object)null && (Object)character == (Object)_localCharacter)
 		{
 			return;
+		}
+		if (string.IsNullOrWhiteSpace(selection) && (Object)val != (Object)null && val.OwnerActorNr > 0)
+		{
+			selection = GetAkSoundSelectionForActor(val.OwnerActorNr);
 		}
 		if (soundPosition == Vector3.zero)
 		{
@@ -7178,7 +7308,9 @@ public class Plugin : BaseUnityPlugin
 			flag = true;
 		}
 		RefreshPlayerWeaponSelectionCache();
+		RefreshPlayerAkSoundSelectionCache();
 		PublishLocalWeaponSelectionToPlayerProperties(flag || string.IsNullOrEmpty(_lastPublishedLocalWeaponSelection));
+		PublishLocalAkSoundSelectionToPlayerProperties(flag || string.IsNullOrEmpty(_lastPublishedLocalAkSoundSelection));
 		if (PhotonNetwork.IsMasterClient)
 		{
 			if (!_wasRoomMasterClient)
@@ -7213,6 +7345,7 @@ public class Plugin : BaseUnityPlugin
 		_lastPublishedRoomConfigPayload = string.Empty;
 		_lastAppliedRoomConfigPayload = string.Empty;
 		_lastPublishedLocalWeaponSelection = string.Empty;
+		_lastPublishedLocalAkSoundSelection = string.Empty;
 		_lastRoomConfigPublishTime = -10f;
 		_lastRoomConfigPollTime = -10f;
 		_wasRoomMasterClient = false;
@@ -7221,6 +7354,7 @@ public class Plugin : BaseUnityPlugin
 		_pendingRemoteFirstAidGrant = false;
 		_lastPendingRemoteGrantAttemptTime = -10f;
 		_playerWeaponSelectionsByActor.Clear();
+		_playerAkSoundSelectionsByActor.Clear();
 		if (clearBackup)
 		{
 			_localRoomConfigBackupPayload = string.Empty;
@@ -7339,6 +7473,22 @@ public class Plugin : BaseUnityPlugin
 		}
 	}
 
+	private static void RefreshPlayerAkSoundSelectionCache()
+	{
+		if (!PhotonNetwork.InRoom)
+		{
+			_playerAkSoundSelectionsByActor.Clear();
+			return;
+		}
+		foreach (RoomPlayer player in PhotonNetwork.PlayerList ?? Array.Empty<RoomPlayer>())
+		{
+			if (player != null && player.ActorNumber > 0)
+			{
+				_playerAkSoundSelectionsByActor[player.ActorNumber] = GetAkSoundSelectionForPlayer(player);
+			}
+		}
+	}
+
 	private void PublishLocalWeaponSelectionToPlayerProperties(bool force = false)
 	{
 		string currentWeaponSelection = GetCurrentWeaponSelection();
@@ -7370,27 +7520,71 @@ public class Plugin : BaseUnityPlugin
 		_lastPublishedLocalWeaponSelection = currentWeaponSelection;
 	}
 
+	private void PublishLocalAkSoundSelectionToPlayerProperties(bool force = false)
+	{
+		string currentAkSoundSelection = GetCurrentAkSoundSelection();
+		if (PhotonNetwork.LocalPlayer != null && PhotonNetwork.LocalPlayer.ActorNumber > 0)
+		{
+			_playerAkSoundSelectionsByActor[PhotonNetwork.LocalPlayer.ActorNumber] = currentAkSoundSelection;
+		}
+		if (!PhotonNetwork.InRoom || PhotonNetwork.LocalPlayer == null)
+		{
+			_lastPublishedLocalAkSoundSelection = string.Empty;
+			return;
+		}
+		if (PhotonNetwork.OfflineMode)
+		{
+			_lastPublishedLocalAkSoundSelection = currentAkSoundSelection;
+			return;
+		}
+		if (!force && string.Equals(currentAkSoundSelection, _lastPublishedLocalAkSoundSelection, StringComparison.Ordinal))
+		{
+			return;
+		}
+		PhotonHashtable val = new PhotonHashtable();
+		((Dictionary<object, object>)val).Add((object)PlayerAkSoundSelectionPropertyKey, (object)currentAkSoundSelection);
+		PhotonNetwork.LocalPlayer.SetCustomProperties(val);
+		if (PhotonNetwork.LocalPlayer.ActorNumber > 0)
+		{
+			_playerAkSoundSelectionsByActor[PhotonNetwork.LocalPlayer.ActorNumber] = currentAkSoundSelection;
+		}
+		_lastPublishedLocalAkSoundSelection = currentAkSoundSelection;
+	}
+
 	private void HandlePlayerPropertiesUpdated(RoomPlayer targetPlayer, PhotonHashtable changedProps)
 	{
 		if (targetPlayer == null || changedProps == null)
 		{
 			return;
 		}
-		if (!((Dictionary<object, object>)(object)changedProps).ContainsKey((object)PlayerWeaponSelectionPropertyKey))
+		bool flag = ((Dictionary<object, object>)(object)changedProps).ContainsKey((object)PlayerWeaponSelectionPropertyKey);
+		bool flag2 = ((Dictionary<object, object>)(object)changedProps).ContainsKey((object)PlayerAkSoundSelectionPropertyKey);
+		if (!flag && !flag2)
 		{
 			return;
 		}
 		if (targetPlayer.ActorNumber > 0)
 		{
-			_playerWeaponSelectionsByActor[targetPlayer.ActorNumber] = GetWeaponSelectionForPlayer(targetPlayer);
+			if (flag)
+			{
+				_playerWeaponSelectionsByActor[targetPlayer.ActorNumber] = GetWeaponSelectionForPlayer(targetPlayer);
+			}
+			if (flag2)
+			{
+				_playerAkSoundSelectionsByActor[targetPlayer.ActorNumber] = GetAkSoundSelectionForPlayer(targetPlayer);
+			}
 		}
-		RequestAkVisualRefresh(includeUiRefresh: true, forceRefresh: true);
+		if (flag)
+		{
+			RequestAkVisualRefresh(includeUiRefresh: true, forceRefresh: true);
+		}
 	}
 
 	private void HandleRoomPlayerListChanged()
 	{
 		TrimStalePendingRemoteGrantActors();
 		RefreshPlayerWeaponSelectionCache();
+		RefreshPlayerAkSoundSelectionCache();
 		if (PhotonNetwork.IsMasterClient)
 		{
 			MarkRoomConfigDirty(forceImmediate: true);
@@ -10218,15 +10412,27 @@ public class Plugin : BaseUnityPlugin
 				{
 					continue;
 				}
+				string text = GetLegacyConfigSectionAlias(val);
 				string localizedSectionName = GetLocalizedSectionName(val.Definition.Section, isChinese: true);
 				string localizedKeyName = GetLocalizedKeyName(val.Definition.Key, isChinese: true);
-				ConfigDefinition[] array2 = (ConfigDefinition[])(object)new ConfigDefinition[3]
+				List<ConfigDefinition> list = new List<ConfigDefinition>(6)
 				{
 					new ConfigDefinition(localizedSectionName, val.Definition.Key),
 					new ConfigDefinition(val.Definition.Section, localizedKeyName),
 					new ConfigDefinition(localizedSectionName, localizedKeyName)
 				};
-				foreach (ConfigDefinition key in array2)
+				if (!string.IsNullOrWhiteSpace(text) && !string.Equals(text, val.Definition.Section, StringComparison.Ordinal))
+				{
+					string localizedSectionName2 = GetLocalizedSectionName(text, isChinese: true);
+					list.Add(new ConfigDefinition(text, val.Definition.Key));
+					list.Add(new ConfigDefinition(text, localizedKeyName));
+					if (!string.IsNullOrWhiteSpace(localizedSectionName2))
+					{
+						list.Add(new ConfigDefinition(localizedSectionName2, val.Definition.Key));
+						list.Add(new ConfigDefinition(localizedSectionName2, localizedKeyName));
+					}
+				}
+				foreach (ConfigDefinition key in list)
 				{
 					if (dictionary.Contains(key))
 					{
@@ -10253,6 +10459,15 @@ public class Plugin : BaseUnityPlugin
 		{
 			Log.LogWarning((object)("[ShootZombies] MigrateLegacyLocalizedConfigEntries failed: " + DescribeReflectionException(ex)));
 		}
+	}
+
+	private static string GetLegacyConfigSectionAlias(ConfigEntryBase entry)
+	{
+		if (entry == null)
+		{
+			return string.Empty;
+		}
+		return GetModConfigSectionForEntry(entry);
 	}
 
 	private static void SetPrivateField(object target, string fieldName, object value)
@@ -10316,6 +10531,32 @@ public class Plugin : BaseUnityPlugin
 	internal static bool ShouldExposeOwnedConfigEntryRuntime(ConfigEntryBase entry)
 	{
 		return ShouldExposeOwnedConfigEntry(entry);
+	}
+
+	internal static string[] GetOwnedSelectableConfigValuesRuntime(ConfigEntryBase entry)
+	{
+		if ((object)entry == ConfigPanelTheme)
+		{
+			return ConfigPanelThemeValues.ToArray();
+		}
+		if ((object)entry == WeaponSelection)
+		{
+			return WeaponSelectionValues.ToArray();
+		}
+		if ((object)entry == AkSoundSelection)
+		{
+			return AkSoundSelectionValues.ToArray();
+		}
+		if ((object)entry == ZombieBehaviorDifficulty)
+		{
+			return ZombieBehaviorDifficultyValues.ToArray();
+		}
+		return Array.Empty<string>();
+	}
+
+	internal static bool ShouldEmitVerboseInfoLogsRuntime()
+	{
+		return EnableVerboseInfoLogs;
 	}
 
 	private static string GetLocalizedSectionName(string section, bool isChinese)
@@ -10534,6 +10775,7 @@ private static string NormalizeConfigKeyAlias(string key)
 	{
 	case "Fire Interval":
 	case "射击间隔":
+	case "射击间隔（秒）":
 		return "Fire Interval";
 	case "Fire Volume":
 	case "射击音量":
@@ -10544,6 +10786,7 @@ private static string NormalizeConfigKeyAlias(string key)
 		return "Weapon Model X Rotation";
 	case "Weapon Model Y Rotation":
 	case "武器Y轴旋转":
+	case "手持模型Y轴旋转":
 		return "Weapon Model Y Rotation";
 	case "Weapon Model Z Rotation":
 	case "武器Z轴旋转":
@@ -10551,18 +10794,23 @@ private static string NormalizeConfigKeyAlias(string key)
 		return "Weapon Model Z Rotation";
 	case "Weapon Model Scale":
 	case "武器模型缩放":
+	case "手持模型缩放":
 		return "Weapon Model Scale";
 	case "Weapon Model X Position":
 	case "武器X轴位置":
+	case "手持模型X位置":
 		return "Weapon Model X Position";
 	case "Weapon Model Y Position":
 	case "武器Y轴位置":
+	case "手持模型Y位置":
 		return "Weapon Model Y Position";
 	case "Weapon Model Z Position":
 	case "武器Z轴位置":
+	case "手持模型Z位置":
 		return "Weapon Model Z Position";
 	case "AK Sound":
 	case "AK47音效":
+	case "AK射击音效":
 		return "AK Sound";
 	case "Weapon Selection":
 	case "武器选择":
@@ -10587,19 +10835,27 @@ private static string NormalizeConfigKeyAlias(string key)
 	case "Mod":
 	case "模组":
 	case "模组总开关":
+	case "启用模组":
 		return "Mod";
 	case "Weapon Enabled":
 	case "Weapon":
 	case "武器生成":
 	case "武器生成启用":
+	case "启用武器发放":
 		return "Weapon";
 	case "Spawn Weapon":
 	case "生成武器":
+	case "生成武器按键":
 		return "Spawn Weapon";
 	case "Open Config Panel":
 	case "打开配置面板":
+	case "打开配置面板按键":
 	case "配置面板":
 		return "Open Config Panel";
+	case "Config Panel Theme":
+	case "面板主题":
+	case "配置面板主题":
+		return "Config Panel Theme";
 	case "Zombie Spawn Enabled":
 	case "Zombie Spawn":
 	case "Enabled":
@@ -10633,6 +10889,7 @@ private static string NormalizeConfigKeyAlias(string key)
 		return "Interval Random";
 	case "Spawn Count":
 	case "每次生成数量":
+	case "每波生成数量":
 		return "Spawn Count";
 	case "Count Random":
 	case "数量随机":
@@ -10748,6 +11005,29 @@ private static bool TryGetLocalizedSectionDisplayName(string section, bool isChi
 				return;
 			}
 			bool flag = false;
+			flag |= MigrateCurrentConfigEntryAliases(dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ModEnabled, "General", "Mod", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)OpenConfigPanelKey, "General", "Open Config Panel", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ConfigPanelTheme, "General", "Config Panel Theme", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponEnabled, "General", "Weapon", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponSelection, "General", "Weapon Selection", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)SpawnWeaponKey, "General", "Spawn Weapon", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)FireInterval, "General", "Fire Interval", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)FireVolume, "General", "Fire Volume", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)AkSoundSelection, "General", "AK Sound", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ZombieTimeReduction, "General", "Zombie Time Reduction", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelScale, "General", "Weapon Model Scale", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelPitch, "General", "Weapon Model X Rotation", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelYaw, "General", "Weapon Model Y Rotation", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelRoll, "General", "Weapon Model Z Rotation", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelOffsetX, "General", "Weapon Model X Position", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelOffsetY, "General", "Weapon Model Y Position", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)WeaponModelOffsetZ, "General", "Weapon Model Z Position", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)MaxZombies, "General", "Max Count", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ZombieSpawnCount, "General", "Spawn Count", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ZombieSpawnInterval, "General", "Spawn Interval", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ZombieMaxLifetime, "General", "Max Lifetime", dictionary);
+			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)ZombieBehaviorDifficulty, "General", "Behavior Difficulty", dictionary);
 			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)SpawnWeaponKey, "Hotkeys", "Spawn Weapon", dictionary);
 			flag |= MigrateLegacyConfigEntryValue((ConfigEntryBase)(object)SpawnWeaponKey, "Features", "Spawn Weapon", dictionary);
 			flag |= RemoveLegacyConfigEntryValue("Weapon", "Max Distance", dictionary);
@@ -10836,6 +11116,30 @@ private static bool TryGetLocalizedSectionDisplayName(string section, bool isChi
 		{
 			Log.LogWarning((object)("[ShootZombies] MigrateFeatureConfigDefinitions failed: " + DescribeReflectionException(ex)));
 		}
+	}
+
+	private bool MigrateCurrentConfigEntryAliases(IDictionary orphanedEntries)
+	{
+		if (orphanedEntries == null)
+		{
+			return false;
+		}
+		bool flag = false;
+		ConfigEntryBase[] configEntriesSnapshot = GetConfigEntriesSnapshot(((BaseUnityPlugin)this).Config);
+		foreach (ConfigEntryBase item in configEntriesSnapshot)
+		{
+			if (item == null || item.Definition == (ConfigDefinition)null)
+			{
+				continue;
+			}
+			string modConfigSectionForEntry = GetModConfigSectionForEntry(item);
+			string text = NormalizeConfigKeyAlias(item.Definition.Key);
+			if (!string.IsNullOrWhiteSpace(modConfigSectionForEntry) && !string.IsNullOrWhiteSpace(text))
+			{
+				flag |= MigrateLegacyConfigEntryValue(item, modConfigSectionForEntry, text, orphanedEntries);
+			}
+		}
+		return flag;
 	}
 
 	private static bool MigrateLegacyConfigEntryValue(ConfigEntryBase target, string legacySection, string legacyKey, IDictionary orphanedEntries)
@@ -10971,6 +11275,8 @@ private static string GetLocalizedKeyNameCore(string key, bool isChinese)
 		return isChinese ? "生成武器按键" : "Spawn Weapon Key";
 	case "Open Config Panel":
 		return isChinese ? "打开配置面板按键" : "Open Config Panel Key";
+	case "Config Panel Theme":
+		return isChinese ? "面板主题" : "Panel Theme";
 	case "Zombie Spawn":
 		return isChinese ? "启用僵尸生成" : "Enable Zombie Spawns";
 	case "Move Speed":
@@ -11065,6 +11371,8 @@ private static string GetLocalizedDescriptionCore(string key, bool isChinese)
 		return isChinese ? "本地备用发枪按键，用于测试或在自动发枪失效时补发。" : "Local backup hotkey for spawning the weapon if automatic grants fail or for testing.";
 	case "Open Config Panel":
 		return isChinese ? "在大厅中打开或关闭自定义配置面板的按键。" : "Hotkey used in the lobby to open or close the custom configuration panel.";
+	case "Config Panel Theme":
+		return isChinese ? "选择配置面板的外观主题。支持黑色、白色和透明三种版本，并会保存你的本地选择。" : "Selects the configuration panel appearance. Supports dark, light, and transparent themes and saves your local choice.";
 	case "Zombie Spawn":
 		return isChinese ? "控制僵尸生成系统是否运行。关闭后不会继续刷出新的僵尸。" : "Turns the zombie spawn system on or off. Disabling it stops new zombie waves from spawning.";
 	case "Move Speed":
@@ -11234,9 +11542,10 @@ private void RefreshRealModConfigUi()
 	{
 		if (!((Object)(object)Instance == (Object)null) && IsModConfigUiRuntimeSafe())
 		{
+			string text = NormalizeModConfigContextName(__0);
 			if (!string.IsNullOrWhiteSpace(__0))
 			{
-				Instance._activeModConfigName = __0;
+				Instance._activeModConfigName = text;
 			}
 			else if (__instance != null)
 			{
@@ -11245,6 +11554,12 @@ private void RefreshRealModConfigUi()
 				{
 					Instance._activeModConfigName = selectedModConfigCategory;
 				}
+			}
+			string text2 = string.IsNullOrWhiteSpace(text) ? NormalizeModConfigContextName(Instance._activeModConfigName) : text;
+			if (!Instance.IsOwnedModConfigName(text2))
+			{
+				Instance.StopOwnedModConfigStabilizer(restoreRuntimeState: true);
+				return;
 			}
 			Instance.LocalizeModConfigUiNextFrame(__instance);
 		}
@@ -11258,9 +11573,15 @@ private void RefreshRealModConfigUi()
 		}
 		try
 		{
-			if (!string.IsNullOrWhiteSpace(__0))
+			string text = NormalizeModConfigContextName(__0);
+			if (!string.IsNullOrWhiteSpace(text))
 			{
-				Instance._activeModConfigName = __0;
+				Instance._activeModConfigName = text;
+				if (!Instance.IsOwnedModConfigName(text))
+				{
+					Instance.StopOwnedModConfigStabilizer(restoreRuntimeState: true);
+					return;
+				}
 			}
 			Type type = __instance.GetType();
 			CleanupDestroyedModConfigCells(__instance, type);
@@ -11268,6 +11589,10 @@ private void RefreshRealModConfigUi()
 			{
 				Instance.NormalizeOwnedModConfigSections(type.Assembly, __instance, type);
 				Instance.EnsureOwnedModConfigEntriesRegistered(type);
+			}
+			else
+			{
+				Instance.StopOwnedModConfigStabilizer(restoreRuntimeState: true);
 			}
 		}
 		catch (Exception ex)
@@ -11297,6 +11622,11 @@ private void RefreshRealModConfigUi()
 					Instance._activeModConfigName = selectedModConfigCategory;
 				}
 			}
+			if (!Instance.IsOwnedModConfigName(Instance._activeModConfigName))
+			{
+				Instance.StopOwnedModConfigStabilizer(restoreRuntimeState: true);
+				return true;
+			}
 			if (__instance != null && Instance.IsOwnedModConfigName(Instance._activeModConfigName))
 			{
 				Instance.NormalizeOwnedModConfigSections(__instance.GetType().Assembly, __instance, __instance.GetType());
@@ -11321,6 +11651,11 @@ private void RefreshRealModConfigUi()
 			if (!string.IsNullOrWhiteSpace(text))
 			{
 				Instance._activeModConfigName = text;
+			}
+			if (!Instance.IsOwnedModConfigName(Instance._activeModConfigName))
+			{
+				Instance.StopOwnedModConfigStabilizer(restoreRuntimeState: true);
+				return true;
 			}
 			if (Instance.IsOwnedModConfigName(Instance._activeModConfigName) && TryGetOwnedCanonicalSectionName(__0, out var canonicalSectionName) && !string.IsNullOrWhiteSpace(canonicalSectionName))
 			{
@@ -11461,23 +11796,33 @@ private void RefreshRealModConfigUi()
 		{
 			return;
 		}
+		string text = NormalizeModConfigContextName(_activeModConfigName);
+		if (!IsOwnedModConfigName(text))
+		{
+			StopOwnedModConfigStabilizer();
+			return;
+		}
 		if (_lastLocalizedModConfigUiFrame != Time.frameCount)
 		{
 			_lastLocalizedModConfigUiFrame = Time.frameCount;
-			((MonoBehaviour)this).StartCoroutine(LocalizeModConfigUiCoroutine(menuInstance));
+			((MonoBehaviour)this).StartCoroutine(LocalizeModConfigUiCoroutine(menuInstance, text));
 		}
 	}
 
-	private IEnumerator LocalizeModConfigUiCoroutine(object menuInstance)
+	private IEnumerator LocalizeModConfigUiCoroutine(object menuInstance, string ownerModName)
 	{
 		for (int i = 0; i < 4; i++)
 		{
 			yield return null;
-			TryLocalizeVisibleModConfigUi(menuInstance);
+			if (!IsOwnedModConfigContextStillValid(ownerModName))
+			{
+				yield break;
+			}
+			TryLocalizeVisibleModConfigUi(menuInstance, ownerModName);
 		}
 	}
 
-	private void TryLocalizeVisibleModConfigUi(object menuInstance = null)
+	private void TryLocalizeVisibleModConfigUi(object menuInstance = null, string ownerModName = null)
 	{
 		if (!IsModConfigUiRuntimeSafe())
 		{
@@ -11510,8 +11855,14 @@ private void RefreshRealModConfigUi()
 		}
 		bool isChinese = IsChineseLanguage();
 		SyncActiveModConfigName(menuInstance2, menuType);
+		if (!string.IsNullOrWhiteSpace(ownerModName) && !IsOwnedModConfigContextStillValid(ownerModName))
+		{
+			StopOwnedModConfigStabilizer();
+			return;
+		}
 		if (!IsOwnedModConfigName(_activeModConfigName))
 		{
+			StopOwnedModConfigStabilizer();
 			return;
 		}
 		EnsureOwnedModConfigEntriesRegistered(menuType);
@@ -11532,74 +11883,131 @@ private void RefreshRealModConfigUi()
 
 	private void EnsureOwnedModConfigStabilizer(object menuInstance)
 	{
-		if (_modConfigStabilizeCoroutine == null)
+		string text = NormalizeModConfigContextName(_activeModConfigName);
+		if (!IsOwnedModConfigName(text))
 		{
-			_modConfigStabilizeCoroutine = ((MonoBehaviour)this).StartCoroutine(StabilizeOwnedModConfigUiCoroutine(menuInstance));
+			StopOwnedModConfigStabilizer();
+			return;
+		}
+		if (_modConfigStabilizeCoroutine != null)
+		{
+			if (string.Equals(_modConfigStabilizeOwnerName, text, StringComparison.OrdinalIgnoreCase))
+			{
+				return;
+			}
+			StopOwnedModConfigStabilizer();
+		}
+		_modConfigStabilizeOwnerName = text;
+		_modConfigStabilizeCoroutine = ((MonoBehaviour)this).StartCoroutine(StabilizeOwnedModConfigUiCoroutine(menuInstance, text));
+	}
+
+	private static string NormalizeModConfigContextName(string modName)
+	{
+		return NormalizeLocalizedText(modName).Trim();
+	}
+
+	private bool IsOwnedModConfigContextStillValid(string ownerModName)
+	{
+		ownerModName = NormalizeModConfigContextName(ownerModName);
+		if (string.IsNullOrWhiteSpace(ownerModName) || !IsOwnedModConfigName(ownerModName))
+		{
+			return false;
+		}
+		string text = NormalizeModConfigContextName(_activeModConfigName);
+		return !string.IsNullOrWhiteSpace(text) && string.Equals(text, ownerModName, StringComparison.OrdinalIgnoreCase);
+	}
+
+	private void StopOwnedModConfigStabilizer(bool restoreRuntimeState = false)
+	{
+		bool flag = _modConfigStabilizeCoroutine != null || !string.IsNullOrWhiteSpace(_modConfigStabilizeOwnerName);
+		if (_modConfigStabilizeCoroutine != null)
+		{
+			((MonoBehaviour)this).StopCoroutine(_modConfigStabilizeCoroutine);
+			_modConfigStabilizeCoroutine = null;
+		}
+		_modConfigStabilizeOwnerName = string.Empty;
+		if (restoreRuntimeState && flag)
+		{
+			RefreshRealModConfigUi();
 		}
 	}
 
-	private IEnumerator StabilizeOwnedModConfigUiCoroutine(object menuInstance)
+	private IEnumerator StabilizeOwnedModConfigUiCoroutine(object menuInstance, string ownerModName)
 	{
-		for (int i = 0; i < 20; i++)
+		try
 		{
-			yield return null;
-			if (!IsModConfigUiRuntimeSafe())
+			for (int i = 0; i < 20; i++)
 			{
-				continue;
-			}
-			if (!TryGetModConfigMenuInstance(out var menuType, out var menuInstance2))
-			{
-				if (menuInstance == null)
+				yield return null;
+				if (!IsOwnedModConfigContextStillValid(ownerModName))
+				{
+					yield break;
+				}
+				if (!IsModConfigUiRuntimeSafe())
 				{
 					continue;
 				}
-				menuInstance2 = menuInstance;
-				menuType = menuInstance.GetType();
-			}
-			Behaviour val = (Behaviour)((menuInstance2 is Behaviour) ? menuInstance2 : null);
-			if (val == null || (Object)val == (Object)null)
-			{
-				continue;
-			}
-			bool flag;
-			try
-			{
-				flag = val.isActiveAndEnabled && ((Component)val).gameObject.activeInHierarchy;
-			}
-			catch
-			{
-				flag = false;
-			}
-			if (!flag)
-			{
-				continue;
-			}
-			SyncActiveModConfigName(menuInstance2, menuType);
-			if (!IsOwnedModConfigName(_activeModConfigName))
-			{
-				continue;
-			}
-			EnsureOwnedModConfigEntriesRegistered(menuType);
-			bool flag2 = NeedsOwnedModConfigSectionRebuild(menuInstance2, menuType);
-			bool isChinese = IsChineseLanguage();
-			if (flag2)
-			{
-				RepairOwnedModConfigSections(menuInstance2, menuType);
-			}
-			RepairOwnedModConfigState(menuInstance2, menuType);
-			NormalizeOwnedSectionTabCategories(menuInstance2, menuType, isChinese);
-			LocalizeOwnedModConfigSectionTabs(menuInstance2, menuType, isChinese);
-			Dictionary<string, string> map = BuildModConfigUiLocalizationMap(isChinese);
-			foreach (Transform item in EnumerateModConfigUiRoots(menuInstance2, menuType))
-			{
-				ApplyTextLocalizationToRoot(item, map);
-			}
-			if (!NeedsOwnedModConfigSectionRebuild(menuInstance2, menuType) && AreOwnedSectionTabLabelsStable(menuInstance2, menuType, isChinese))
-			{
-				break;
+				if (!TryGetModConfigMenuInstance(out var menuType, out var menuInstance2))
+				{
+					if (menuInstance == null)
+					{
+						continue;
+					}
+					menuInstance2 = menuInstance;
+					menuType = menuInstance.GetType();
+				}
+				Behaviour val = (Behaviour)((menuInstance2 is Behaviour) ? menuInstance2 : null);
+				if (val == null || (Object)val == (Object)null)
+				{
+					continue;
+				}
+				bool flag;
+				try
+				{
+					flag = val.isActiveAndEnabled && ((Component)val).gameObject.activeInHierarchy;
+				}
+				catch
+				{
+					flag = false;
+				}
+				if (!flag)
+				{
+					continue;
+				}
+				SyncActiveModConfigName(menuInstance2, menuType);
+				if (!IsOwnedModConfigContextStillValid(ownerModName))
+				{
+					yield break;
+				}
+				EnsureOwnedModConfigEntriesRegistered(menuType);
+				bool flag2 = NeedsOwnedModConfigSectionRebuild(menuInstance2, menuType);
+				bool isChinese = IsChineseLanguage();
+				if (flag2)
+				{
+					RepairOwnedModConfigSections(menuInstance2, menuType);
+				}
+				RepairOwnedModConfigState(menuInstance2, menuType);
+				NormalizeOwnedSectionTabCategories(menuInstance2, menuType, isChinese);
+				LocalizeOwnedModConfigSectionTabs(menuInstance2, menuType, isChinese);
+				Dictionary<string, string> map = BuildModConfigUiLocalizationMap(isChinese);
+				foreach (Transform item in EnumerateModConfigUiRoots(menuInstance2, menuType))
+				{
+					ApplyTextLocalizationToRoot(item, map);
+				}
+				if (!NeedsOwnedModConfigSectionRebuild(menuInstance2, menuType) && AreOwnedSectionTabLabelsStable(menuInstance2, menuType, isChinese))
+				{
+					break;
+				}
 			}
 		}
-		_modConfigStabilizeCoroutine = null;
+		finally
+		{
+			_modConfigStabilizeCoroutine = null;
+			if (string.Equals(_modConfigStabilizeOwnerName, NormalizeModConfigContextName(ownerModName), StringComparison.OrdinalIgnoreCase))
+			{
+				_modConfigStabilizeOwnerName = string.Empty;
+			}
+		}
 	}
 
 	private void RepairOwnedModConfigSections(object menuInstance, Type menuType)
@@ -12841,7 +13249,7 @@ private void RefreshRealModConfigUi()
 		string[] second = new string[]
 		{
 			"Behavior Difficulty", "Lunge Distance", "Lunge Time", "Lunge Recovery Time", "Wakeup Look Angle", "Target Search Interval", "Bite Recovery Time", "Same Player Bite Cooldown",
-			"AK Sound", "Mod Enabled", "Weapon Enabled", "Mod", "Weapon", "Zombie Spawn", "Open Config Panel"
+			"AK Sound", "Mod Enabled", "Weapon Enabled", "Mod", "Weapon", "Zombie Spawn", "Open Config Panel", "Config Panel Theme"
 		};
 		string[] second2 = new string[1] { "Spawn Weapon" };
 		foreach (string item in first.Concat(second).Concat(second2))
@@ -13511,7 +13919,7 @@ private static string GetCanonicalConfigSection(object instance)
 
 	private static int GetModConfigSectionSortIndex(string section)
 	{
-		return section switch
+		return NormalizeSectionAlias(section) switch
 		{
 			"Weapon" => 0, 
 			"Zombie" => 1, 
@@ -13543,21 +13951,25 @@ private static string GetCanonicalConfigSection(object instance)
 		{
 			return 103;
 		}
-		if ((object)entry == FireInterval)
+		if ((object)entry == ConfigPanelTheme)
 		{
 			return 104;
 		}
-		if ((object)entry == FireVolume)
+		if ((object)entry == FireInterval)
 		{
 			return 105;
 		}
-		if ((object)entry == AkSoundSelection)
+		if ((object)entry == FireVolume)
 		{
 			return 106;
 		}
-		if ((object)entry == ZombieTimeReduction)
+		if ((object)entry == AkSoundSelection)
 		{
 			return 107;
+		}
+		if ((object)entry == ZombieTimeReduction)
+		{
+			return 108;
 		}
 		if ((object)entry == WeaponModelScale)
 		{
@@ -13696,7 +14108,7 @@ private static string GetCanonicalConfigSection(object instance)
 		{
 			return "Zombie";
 		}
-		if ((object)entry == ModEnabled || (object)entry == OpenConfigPanelKey || (object)entry == WeaponModelPitch || (object)entry == WeaponModelYaw || (object)entry == WeaponModelRoll || (object)entry == WeaponModelOffsetX || (object)entry == WeaponModelOffsetY || (object)entry == WeaponModelOffsetZ)
+		if ((object)entry == ModEnabled || (object)entry == OpenConfigPanelKey || (object)entry == ConfigPanelTheme || (object)entry == WeaponModelPitch || (object)entry == WeaponModelYaw || (object)entry == WeaponModelRoll || (object)entry == WeaponModelOffsetX || (object)entry == WeaponModelOffsetY || (object)entry == WeaponModelOffsetZ)
 		{
 			return "Features";
 		}
@@ -13874,7 +14286,7 @@ private static string GetCanonicalConfigSection(object instance)
 			bool isChinese = (_lastLanguageSetting = IsChineseLanguage());
 			ApplyLocalizedConfigMetadata(isChinese);
 			RefreshLocalizedConfigFiles(isChinese);
-			if (IsModConfigUiRuntimeSafe())
+			if (!DisableModConfigRuntimePatches && IsModConfigUiRuntimeSafe())
 			{
 				TryLocalizeVisibleModConfigUi();
 			}
@@ -13894,16 +14306,8 @@ private static string GetCanonicalConfigSection(object instance)
 	{
 		try
 		{
-			string configSchemaSignature = GetCurrentConfigSchemaSignature();
-			string currentConfigLanguageToken = GetCurrentConfigLanguageToken(isChinese);
-			bool flag = ShouldRewriteCanonicalConfigFile(configSchemaSignature, currentConfigLanguageToken);
 			ConfigFile config = ((BaseUnityPlugin)this).Config;
-			if (config != null && flag)
-			{
-				ForceRewriteCanonicalConfigFile(config);
-			}
-			NormalizeCanonicalConfigEncoding();
-			UpdateCanonicalConfigMetadata(configSchemaSignature, currentConfigLanguageToken);
+			config?.Save();
 			CleanupAuxiliaryConfigFiles();
 		}
 		catch (Exception ex)
@@ -13912,7 +14316,7 @@ private static string GetCanonicalConfigSection(object instance)
 		}
 	}
 
-	private void PrepareCanonicalConfigFile()
+	private void PreparePrimaryConfigFile()
 	{
 		try
 		{
@@ -13925,21 +14329,19 @@ private static string GetCanonicalConfigSection(object instance)
 					Directory.CreateDirectory(directoryName);
 				}
 			}
-			string text = GetLatestExistingConfigPath(new string[2]
+			if (!string.IsNullOrWhiteSpace(canonicalConfigPath) && !File.Exists(canonicalConfigPath))
 			{
-				GetPreviousCanonicalConfigPath(),
-				GetLegacyCanonicalConfigPath()
-			});
-			if (!string.IsNullOrWhiteSpace(canonicalConfigPath) && !string.IsNullOrWhiteSpace(text))
-			{
-				bool flag = !File.Exists(canonicalConfigPath);
-				if (!flag)
+				string text = GetLatestExistingConfigPath(new string[7]
 				{
-					DateTime lastWriteTimeUtc = File.GetLastWriteTimeUtc(text);
-					DateTime lastWriteTimeUtc2 = File.GetLastWriteTimeUtc(canonicalConfigPath);
-					flag = lastWriteTimeUtc > lastWriteTimeUtc2;
-				}
-				if (flag)
+					GetCanonicalConfigPath(),
+					GetPreviousCanonicalConfigPath(),
+					GetLegacyCanonicalConfigPath(),
+					Path.Combine(Paths.ConfigPath, "Thanks.ShootZombies.zh-CN.cfg"),
+					Path.Combine(Paths.ConfigPath, "Thanks.ShootZombies.en.cfg"),
+					GetLocalizedConfigMirrorPath(),
+					GetPreviousLocalizedConfigMirrorPath()
+				});
+				if (!string.IsNullOrWhiteSpace(text) && File.Exists(text))
 				{
 					File.Copy(text, canonicalConfigPath, overwrite: true);
 				}
@@ -13948,7 +14350,7 @@ private static string GetCanonicalConfigSection(object instance)
 		}
 		catch (Exception ex)
 		{
-			Log.LogWarning((object)("[ShootZombies] PrepareCanonicalConfigFile failed: " + ex.Message));
+			Log.LogWarning((object)("[ShootZombies] PreparePrimaryConfigFile failed: " + ex.Message));
 		}
 	}
 
@@ -14039,7 +14441,7 @@ private static string GetCanonicalConfigSection(object instance)
 		return string.Empty;
 	}
 
-	private static string ReadStoredZombieBehaviorDifficultySelection()
+	private string ReadStoredZombieBehaviorDifficultySelection()
 	{
 		string text = ReadConfigMetadataValue(GetCanonicalConfigPath(), ConfigMetadataZombieDifficultyPrefix);
 		if (string.IsNullOrWhiteSpace(text))
@@ -14053,38 +14455,31 @@ private static string GetCanonicalConfigSection(object instance)
 	{
 		try
 		{
-			string canonicalConfigPath = GetCanonicalConfigPath();
 			HashSet<string> hashSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-			if (!string.IsNullOrWhiteSpace(Paths.ConfigPath) && Directory.Exists(Paths.ConfigPath))
+			string canonicalConfigPath = GetCanonicalConfigPath();
+			if (!string.IsNullOrWhiteSpace(canonicalConfigPath))
 			{
-				string[] array = new string[3] { "Thanks.ShootZombies*.cfg", "com.github.Thanks.ShootZombies*.cfg", "com.github.PeakTest.ShootZombies*.cfg" };
-				foreach (string searchPattern in array)
-				{
-					foreach (string item in Directory.EnumerateFiles(Paths.ConfigPath, searchPattern, SearchOption.TopDirectoryOnly))
-					{
-						if (!string.Equals(item, canonicalConfigPath, StringComparison.OrdinalIgnoreCase))
-						{
-							hashSet.Add(item);
-						}
-					}
-				}
+				hashSet.Add(canonicalConfigPath);
 			}
-			string[] array2 = new string[5]
+			HashSet<string> hashSet2 = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+			string[] array2 = new string[7]
 			{
+				GetPreviousCanonicalConfigPath(),
+				GetLegacyCanonicalConfigPath(),
+				Path.Combine(Paths.ConfigPath, "Thanks.ShootZombies.zh-CN.cfg"),
+				Path.Combine(Paths.ConfigPath, "Thanks.ShootZombies.en.cfg"),
 				GetLocalizedConfigMirrorPath(),
 				GetPreviousLocalizedConfigMirrorPath(),
-				GetLegacyLocalizedConfigMirrorPath(),
-				GetPreviousCanonicalConfigPath(),
-				GetLegacyCanonicalConfigPath()
+				GetLegacyLocalizedConfigMirrorPath()
 			};
 			foreach (string item2 in array2)
 			{
-				if (!string.IsNullOrWhiteSpace(item2) && !string.Equals(item2, canonicalConfigPath, StringComparison.OrdinalIgnoreCase))
+				if (!string.IsNullOrWhiteSpace(item2) && !hashSet.Contains(item2))
 				{
-					hashSet.Add(item2);
+					hashSet2.Add(item2);
 				}
 			}
-			foreach (string item3 in hashSet)
+			foreach (string item3 in hashSet2)
 			{
 				if (File.Exists(item3))
 				{
@@ -14434,18 +14829,28 @@ private static string GetCanonicalConfigSection(object instance)
 
 	private void RewriteCanonicalConfigForUserPresentation()
 	{
-		try
-		{
-			UpdateCanonicalConfigMetadata(GetCurrentConfigSchemaSignature(), GetCurrentConfigLanguageToken(IsChineseLanguage()));
-		}
-		catch
-		{
-		}
+		// Intentionally left blank.
+		// ModConfig now reads the single canonical cfg file directly, so we no longer
+		// post-process the saved file or trim entries after BepInEx writes it.
 	}
 
 	private static string GetCanonicalConfigPath()
 	{
 		return Path.Combine(Paths.ConfigPath, CanonicalConfigFileName);
+	}
+
+	private string GetActivePluginConfigPath()
+	{
+		if (!string.IsNullOrWhiteSpace(_pluginConfigPath))
+		{
+			return _pluginConfigPath;
+		}
+		return GetCanonicalConfigPath();
+	}
+
+	private static string GetConfigFilePath(ConfigFile config)
+	{
+		return (((object)config)?.GetType().GetProperty("ConfigFilePath", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(config) as string) ?? string.Empty;
 	}
 
 	private static string GetPreviousCanonicalConfigPath()

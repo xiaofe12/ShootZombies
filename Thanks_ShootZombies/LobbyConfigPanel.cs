@@ -22,7 +22,8 @@ internal sealed class LobbyConfigPanel
 	private enum PanelThemeMode
 	{
 		Dark,
-		Light
+		Light,
+		Transparent
 	}
 
 	private sealed class ConfigSource
@@ -190,12 +191,17 @@ internal sealed class LobbyConfigPanel
 	public LobbyConfigPanel(Plugin owner)
 	{
 		_owner = owner;
-		_panelTheme = PanelThemeMode.Dark;
+		_panelTheme = GetConfiguredThemeMode();
 	}
 
 	private bool IsLightTheme()
 	{
 		return _panelTheme == PanelThemeMode.Light;
+	}
+
+	private bool IsTransparentTheme()
+	{
+		return _panelTheme == PanelThemeMode.Transparent;
 	}
 
 	private static bool IsChineseUi()
@@ -215,9 +221,25 @@ internal sealed class LobbyConfigPanel
 		};
 	}
 
+	private static string GetPanelThemeOptionDisplayText(string value)
+	{
+		bool flag = IsChineseUi();
+		return NormalizeThemeSelectionValue(value) switch
+		{
+			"light" => (flag ? "白色" : "Light"), 
+			"transparent" => (flag ? "透明" : "Transparent"), 
+			_ => (flag ? "黑色" : "Dark"), 
+		};
+	}
+
 	private string GetThemeToggleIcon()
 	{
-		return IsLightTheme() ? "\u263d" : "\u2600";
+		return _panelTheme switch
+		{
+			PanelThemeMode.Light => "\u263d", 
+			PanelThemeMode.Transparent => "\u25cc", 
+			_ => "\u2600", 
+		};
 	}
 
 	private string GetSectionsLabel()
@@ -276,52 +298,168 @@ internal sealed class LobbyConfigPanel
 
 	private void ToggleTheme()
 	{
-		SetTheme(IsLightTheme() ? PanelThemeMode.Dark : PanelThemeMode.Light);
+		SetTheme(GetNextThemeMode(_panelTheme));
 	}
 
-	private void SetTheme(PanelThemeMode theme)
+	private void SetTheme(PanelThemeMode theme, bool persist = true)
 	{
-		if (_panelTheme == theme)
+		bool flag = _panelTheme != theme;
+		if (flag)
+		{
+			_panelTheme = theme;
+			_isDirty = true;
+			if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
+			{
+				Plugin.Log?.LogInfo((object)("[ShootZombies] LobbyConfigPanel theme changed to " + theme + "."));
+			}
+		}
+		if (persist)
+		{
+			PersistThemeSelection(theme);
+		}
+	}
+
+	internal static string NormalizeThemeSelectionValue(string value)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return "dark";
+		}
+		switch (value.Trim().ToLowerInvariant())
+		{
+		case "dark":
+		case "black":
+		case "黑":
+			return "dark";
+		case "light":
+		case "white":
+		case "白":
+			return "light";
+		case "transparent":
+		case "clear":
+		case "translucent":
+		case "透":
+		case "透明":
+			return "transparent";
+		default:
+			return "dark";
+		}
+	}
+
+	private static PanelThemeMode GetThemeModeFromConfigValue(string value)
+	{
+		return NormalizeThemeSelectionValue(value) switch
+		{
+			"light" => PanelThemeMode.Light, 
+			"transparent" => PanelThemeMode.Transparent, 
+			_ => PanelThemeMode.Dark, 
+		};
+	}
+
+	private static string GetThemeConfigValue(PanelThemeMode theme)
+	{
+		return theme switch
+		{
+			PanelThemeMode.Light => "light", 
+			PanelThemeMode.Transparent => "transparent", 
+			_ => "dark", 
+		};
+	}
+
+	private static PanelThemeMode GetNextThemeMode(PanelThemeMode current)
+	{
+		return current switch
+		{
+			PanelThemeMode.Dark => PanelThemeMode.Light, 
+			PanelThemeMode.Light => PanelThemeMode.Transparent, 
+			_ => PanelThemeMode.Dark, 
+		};
+	}
+
+	private static PanelThemeMode GetConfiguredThemeMode()
+	{
+		return GetThemeModeFromConfigValue(Plugin.ConfigPanelTheme?.Value);
+	}
+
+	private void SyncThemeFromConfig()
+	{
+		SetTheme(GetConfiguredThemeMode(), persist: false);
+	}
+
+	private void PersistThemeSelection(PanelThemeMode theme)
+	{
+		if (Plugin.ConfigPanelTheme == null)
 		{
 			return;
 		}
-		_panelTheme = theme;
-		_isDirty = true;
-		Plugin.Log?.LogInfo((object)("[ShootZombies] LobbyConfigPanel theme changed to " + theme + "."));
+		string themeConfigValue = GetThemeConfigValue(theme);
+		if (!string.Equals(NormalizeThemeSelectionValue(Plugin.ConfigPanelTheme.Value), themeConfigValue, StringComparison.Ordinal))
+		{
+			Plugin.ConfigPanelTheme.Value = themeConfigValue;
+		}
+		_owner?.SaveOwnedConfigRuntime();
 	}
 
 	private Color GetImmediateBackdropColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0f, 0f, 0f, 0.01f);
+		}
 		return IsLightTheme() ? new Color(0f, 0f, 0f, 0.06f) : new Color(0f, 0f, 0f, 0.10f);
 	}
 
 	private Color GetImmediateWindowColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0.04f, 0.04f, 0.04f, 0.34f);
+		}
 		return IsLightTheme() ? new Color(0.97f, 0.97f, 0.97f, 1f) : new Color(0.05f, 0.05f, 0.05f, 1f);
 	}
 
 	private Color GetImmediatePaneColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0.08f, 0.08f, 0.08f, 0.24f);
+		}
 		return IsLightTheme() ? new Color(0.92f, 0.92f, 0.92f, 1f) : new Color(0.09f, 0.09f, 0.09f, 1f);
 	}
 
 	private Color GetImmediateCardColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0.11f, 0.11f, 0.11f, 0.28f);
+		}
 		return IsLightTheme() ? new Color(0.98f, 0.98f, 0.98f, 1f) : new Color(0.14f, 0.14f, 0.14f, 1f);
 	}
 
 	private Color GetImmediateFieldColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0.16f, 0.16f, 0.16f, 0.36f);
+		}
 		return IsLightTheme() ? new Color(0.87f, 0.87f, 0.87f, 1f) : new Color(0.20f, 0.20f, 0.20f, 1f);
 	}
 
 	private Color GetImmediateFieldFocusColor()
 	{
+		if (IsTransparentTheme())
+		{
+			return new Color(0.20f, 0.20f, 0.20f, 0.44f);
+		}
 		return IsLightTheme() ? new Color(0.88f, 0.88f, 0.88f, 1f) : new Color(0.24f, 0.24f, 0.24f, 1f);
 	}
 
 	private Color GetImmediateButtonColor(bool active)
 	{
+		if (IsTransparentTheme())
+		{
+			return active ? new Color(0.34f, 0.34f, 0.34f, 0.78f) : new Color(0.18f, 0.18f, 0.18f, 0.58f);
+		}
 		if (IsLightTheme())
 		{
 			return active ? new Color(0.72f, 0.72f, 0.72f, 1f) : new Color(0.86f, 0.86f, 0.86f, 1f);
@@ -335,6 +473,10 @@ internal sealed class LobbyConfigPanel
 		{
 			return active ? new Color(0.98f, 0.98f, 0.98f, 1f) : new Color(0.80f, 0.80f, 0.80f, 1f);
 		}
+		if (theme == PanelThemeMode.Transparent)
+		{
+			return active ? new Color(0.18f, 0.18f, 0.18f, 0.82f) : new Color(0.22f, 0.22f, 0.22f, 0.48f);
+		}
 		return active ? new Color(0.12f, 0.12f, 0.12f, 1f) : new Color(0.28f, 0.28f, 0.28f, 1f);
 	}
 
@@ -343,6 +485,10 @@ internal sealed class LobbyConfigPanel
 		if (theme == PanelThemeMode.Light)
 		{
 			return new Color(0.08f, 0.08f, 0.08f, 1f);
+		}
+		if (theme == PanelThemeMode.Transparent)
+		{
+			return new Color(0.96f, 0.96f, 0.96f, active ? 1f : 0.92f);
 		}
 		return active ? new Color(0.96f, 0.96f, 0.96f, 1f) : new Color(0.86f, 0.86f, 0.86f, 1f);
 	}
@@ -448,6 +594,7 @@ internal sealed class LobbyConfigPanel
 			}
 			return;
 		}
+		SyncThemeFromConfig();
 		if (_pendingKeyCaptureEntry != null)
 		{
 			HandleKeyCapture();
@@ -524,6 +671,7 @@ internal sealed class LobbyConfigPanel
 	private void Open()
 	{
 		EnsureEventSystem();
+		SyncThemeFromConfig();
 		if (_rootObject == null)
 		{
 			BuildUi();
@@ -545,7 +693,10 @@ internal sealed class LobbyConfigPanel
 		_pendingRenderDiagnostic = true;
 		_isDirty = false;
 		_nextExternalRefreshTime = Time.unscaledTime + 0.5f;
-		Plugin.Log?.LogInfo((object)"[ShootZombies] LobbyConfigPanel opened.");
+		if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
+		{
+			Plugin.Log?.LogInfo((object)"[ShootZombies] LobbyConfigPanel opened.");
+		}
 	}
 
 	public void NotifyLanguageChanged(bool isChineseLanguage)
@@ -562,7 +713,10 @@ internal sealed class LobbyConfigPanel
 		_isDirty = false;
 		_nextExternalRefreshTime = Time.unscaledTime + 0.5f;
 		_pendingRenderDiagnostic = true;
-		Plugin.Log?.LogInfo((object)("[ShootZombies] LobbyConfigPanel language refresh applied. isChinese=" + isChineseLanguage + "."));
+		if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
+		{
+			Plugin.Log?.LogInfo((object)("[ShootZombies] LobbyConfigPanel language refresh applied. isChinese=" + isChineseLanguage + "."));
+		}
 	}
 
 	private void Close()
@@ -834,7 +988,7 @@ internal sealed class LobbyConfigPanel
 		};
 		IEnumerable<IGrouping<string, ConfigEntryBase>> enumerable = from entry in configEntriesSnapshotRuntime
 			where entry != null && entry.Definition != null && (!isShootZombies || Plugin.ShouldExposeOwnedConfigEntryRuntime(entry))
-			group entry by (isShootZombies ? Plugin.GetOwnedConfigSectionRuntime(entry) : (entry.Definition.Section ?? string.Empty));
+			group entry by (entry.Definition.Section ?? string.Empty);
 		foreach (IGrouping<string, ConfigEntryBase> item in enumerable.OrderBy((IGrouping<string, ConfigEntryBase> group) => GetSectionSortIndex(configSource, group.Key)).ThenBy((IGrouping<string, ConfigEntryBase> group) => GetSectionDisplayName(configSource, group.Key), StringComparer.OrdinalIgnoreCase))
 		{
 			ConfigSection configSection = new ConfigSection
@@ -854,6 +1008,10 @@ internal sealed class LobbyConfigPanel
 	private static string GetShootZombiesOptionDisplayText(string key, object option)
 	{
 		string text = option?.ToString() ?? string.Empty;
+		if (string.Equals(key, "Config Panel Theme", StringComparison.Ordinal))
+		{
+			return GetPanelThemeOptionDisplayText(text);
+		}
 		if (string.Equals(key, "AK Sound", StringComparison.Ordinal))
 		{
 			return GetAkSoundOptionDisplayText(text);
@@ -1779,6 +1937,10 @@ internal sealed class LobbyConfigPanel
 	private static string GetOptionDisplayText(ConfigEntryBase entry, object option)
 	{
 		string text = option?.ToString() ?? string.Empty;
+		if ((object)entry == Plugin.ConfigPanelTheme)
+		{
+			return GetPanelThemeOptionDisplayText(text);
+		}
 		if ((object)entry == Plugin.AkSoundSelection)
 		{
 			return GetAkSoundOptionDisplayText(text);
@@ -1939,7 +2101,19 @@ internal sealed class LobbyConfigPanel
 	{
 		ConfigSource[] array = _sources.ToArray();
 		ConfigSource configSource = array.FirstOrDefault((ConfigSource source) => source.Sections.Any((ConfigSection section) => section.Entries.Contains(entry)));
-		configSource?.Config?.Save();
+		if (configSource?.IsShootZombies ?? false)
+		{
+			_owner?.SaveOwnedConfigRuntime();
+		}
+		else
+		{
+			configSource?.Config?.Save();
+		}
+		if ((object)entry == Plugin.ConfigPanelTheme)
+		{
+			SyncThemeFromConfig();
+			_isDirty = true;
+		}
 	}
 
 	private static Type GetEntryValueType(ConfigEntryBase entry)
@@ -1964,6 +2138,15 @@ internal sealed class LobbyConfigPanel
 		{
 			options.AddRange(Enum.GetValues(valueType).Cast<object>());
 			return options.Count > 0;
+		}
+		if (entry != null)
+		{
+			string[] ownedSelectableConfigValuesRuntime = Plugin.GetOwnedSelectableConfigValuesRuntime(entry);
+			if (ownedSelectableConfigValuesRuntime.Length > 0)
+			{
+				options.AddRange(ownedSelectableConfigValuesRuntime.Cast<object>());
+				return true;
+			}
 		}
 		object acceptableValues = entry?.Description?.AcceptableValues;
 		if (acceptableValues == null)
@@ -2077,7 +2260,10 @@ internal sealed class LobbyConfigPanel
 		if (_pendingRenderDiagnostic)
 		{
 			_pendingRenderDiagnostic = false;
-			Plugin.Log?.LogInfo((object)$"[ShootZombies] LobbyConfigPanel OnGUI active. sources={_sources.Count}, selectedSource={_selectedSourceId}, selectedSection={_selectedSectionKey}, rect={_windowRect}.");
+			if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
+			{
+				Plugin.Log?.LogInfo((object)$"[ShootZombies] LobbyConfigPanel OnGUI active. sources={_sources.Count}, selectedSource={_selectedSourceId}, selectedSection={_selectedSectionKey}, rect={_windowRect}.");
+			}
 		}
 		GUI.depth = -1000;
 		Color color = GUI.color;
@@ -2108,7 +2294,10 @@ internal sealed class LobbyConfigPanel
 		if (!string.Equals(text, _lastDiagnosticSummary, StringComparison.Ordinal))
 		{
 			_lastDiagnosticSummary = text;
-			Plugin.Log?.LogInfo((object)$"[ShootZombies] LobbyConfigPanel data sources={_sources.Count}, selectedSource={selectedSource?.DisplayName ?? "<none>"}, sections={num}, selectedSection={selectedSection?.DisplayName ?? "<none>"}, entries={num2}.");
+			if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
+			{
+				Plugin.Log?.LogInfo((object)$"[ShootZombies] LobbyConfigPanel data sources={_sources.Count}, selectedSource={selectedSource?.DisplayName ?? "<none>"}, sections={num}, selectedSection={selectedSection?.DisplayName ?? "<none>"}, entries={num2}.");
+			}
 		}
 		_nextDiagnosticLogTime = Time.unscaledTime + 5f;
 	}
@@ -2536,7 +2725,7 @@ internal sealed class LobbyConfigPanel
 
 	private static bool ShouldRenderOptionSelectionBoxStable(ConfigEntryBase entry)
 	{
-		return (object)entry == Plugin.WeaponSelection || (object)entry == Plugin.AkSoundSelection;
+		return (object)entry == Plugin.WeaponSelection || (object)entry == Plugin.AkSoundSelection || (object)entry == Plugin.ConfigPanelTheme;
 	}
 
 	private void DrawImmediateOptionSelectionBoxStable(ConfigEntryBase entry, List<object> options)
@@ -2698,7 +2887,7 @@ internal sealed class LobbyConfigPanel
 
 	private static bool ShouldRenderOptionSelectionBox(ConfigEntryBase entry)
 	{
-		return (object)entry == Plugin.WeaponSelection || (object)entry == Plugin.AkSoundSelection;
+		return (object)entry == Plugin.WeaponSelection || (object)entry == Plugin.AkSoundSelection || (object)entry == Plugin.ConfigPanelTheme;
 	}
 
 	private void DrawImmediateOptionSelectionBox(ConfigEntryBase entry, List<object> options)
