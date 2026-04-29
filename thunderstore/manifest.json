@@ -1,6 +1,6 @@
 {
   "name": "ShootZombies",
-  "version_number": "1.3.0",
+  "version_number": "1.3.2",
   "website_url": "https://github.com/xiaofe12/ShootZombies",
   "description": "Turns PEAK's blowgun into a configurable zombie-survival weapon mode with selectable gun models, lobby weapon grants, an in-game config panel, and host-synced multiplayer settings.",
   "dependencies": [

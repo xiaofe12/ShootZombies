@@ -1925,10 +1925,18 @@ internal sealed class LobbyConfigPanel
 		}
 		if (boxedValue is float value)
 		{
+			if (ShouldRenderWithSingleDecimal(entry))
+			{
+				return value.ToString("0.0", CultureInfo.InvariantCulture);
+			}
 			return value.ToString("0.###", CultureInfo.InvariantCulture);
 		}
 		if (boxedValue is double value2)
 		{
+			if (ShouldRenderWithSingleDecimal(entry))
+			{
+				return value2.ToString("0.0", CultureInfo.InvariantCulture);
+			}
 			return value2.ToString("0.###", CultureInfo.InvariantCulture);
 		}
 		return boxedValue.ToString();
@@ -1986,7 +1994,7 @@ internal sealed class LobbyConfigPanel
 
 	private static string GetEntrySupplementalText(ConfigSource source, ConfigEntryBase entry)
 	{
-		if (source != null && source.IsShootZombies && entry?.Definition != null && string.Equals(entry.Definition.Key, "Behavior Difficulty", StringComparison.Ordinal))
+		if (source != null && source.IsShootZombies && (object)entry == Plugin.ZombieBehaviorDifficulty)
 		{
 			return Plugin.GetZombieBehaviorDifficultyDetailsRuntime();
 		}
@@ -2189,6 +2197,121 @@ internal sealed class LobbyConfigPanel
 		{
 			return false;
 		}
+	}
+
+	private static int CountFractionDigits(double value)
+	{
+		string text = Math.Abs(value).ToString("0.###", CultureInfo.InvariantCulture);
+		int num = text.IndexOf('.');
+		return (num >= 0) ? (text.Length - num - 1) : 0;
+	}
+
+	private static string NormalizeNumericFormatEntryKey(string key)
+	{
+		if (string.IsNullOrWhiteSpace(key))
+		{
+			return string.Empty;
+		}
+		return key.Trim();
+	}
+
+	private static bool IsFogSpeedEntry(ConfigEntryBase entry)
+	{
+		string text = NormalizeNumericFormatEntryKey(entry?.Definition?.Key);
+		return string.Equals(text, "Fog Speed", StringComparison.OrdinalIgnoreCase) || string.Equals(text, "FogSpeed", StringComparison.OrdinalIgnoreCase) || string.Equals(text, "毒雾移动速度", StringComparison.Ordinal) || string.Equals(text, "毒速", StringComparison.Ordinal);
+	}
+
+	private static bool ShouldRenderWithSingleDecimal(ConfigEntryBase entry)
+	{
+		return (object)entry == Plugin.FireInterval || IsFogSpeedEntry(entry);
+	}
+
+	private static int GetNumericStepScale(ConfigEntryBase entry, Type entryValueType, double min, double max)
+	{
+		if (entryValueType == typeof(int))
+		{
+			return 1;
+		}
+		if (ShouldRenderWithSingleDecimal(entry))
+		{
+			return 10;
+		}
+		double num = 0.0;
+		try
+		{
+			object boxedValue = GetBoxedValue(entry);
+			if (boxedValue is float value)
+			{
+				num = value;
+			}
+			else if (boxedValue is double value2)
+			{
+				num = value2;
+			}
+			else if (boxedValue is int value3)
+			{
+				num = value3;
+			}
+		}
+		catch
+		{
+		}
+		int num2 = Math.Max(CountFractionDigits(min), Math.Max(CountFractionDigits(max), CountFractionDigits(num)));
+		return num2 switch
+		{
+			1 => 10, 
+			2 => 100, 
+			3 => 1000, 
+			_ => 1, 
+		};
+	}
+
+	private static bool TryGetScaledNumericRange(ConfigEntryBase entry, Type entryValueType, out int scaledMin, out int scaledMax, out int scale)
+	{
+		scaledMin = 0;
+		scaledMax = 0;
+		scale = 1;
+		if (!TryGetNumericRange(entry, out var min, out var max))
+		{
+			return false;
+		}
+		scale = GetNumericStepScale(entry, entryValueType, min, max);
+		scaledMin = Mathf.RoundToInt((float)(min * (double)scale));
+		scaledMax = Mathf.RoundToInt((float)(max * (double)scale));
+		if (scaledMax < scaledMin)
+		{
+			(scaledMin, scaledMax) = (scaledMax, scaledMin);
+		}
+		return true;
+	}
+
+	private static int GetScaledNumericValue(ConfigEntryBase entry, Type entryValueType, int scale)
+	{
+		object boxedValue = GetBoxedValue(entry);
+		if (entryValueType == typeof(int))
+		{
+			return Convert.ToInt32(boxedValue ?? 0, CultureInfo.InvariantCulture);
+		}
+		if (entryValueType == typeof(double))
+		{
+			double num = Convert.ToDouble(boxedValue ?? 0.0, CultureInfo.InvariantCulture);
+			return Mathf.RoundToInt((float)(num * (double)scale));
+		}
+		float num2 = Convert.ToSingle(boxedValue ?? 0f, CultureInfo.InvariantCulture);
+		return Mathf.RoundToInt(num2 * (float)scale);
+	}
+
+	private static bool TryAssignScaledNumericValue(ConfigEntryBase entry, Type entryValueType, int scaledValue, int scale)
+	{
+		if (entryValueType == typeof(int))
+		{
+			return TryAssignBoxedValue(entry, scaledValue);
+		}
+		if (entryValueType == typeof(double))
+		{
+			return TryAssignBoxedValue(entry, (double)scaledValue / (double)scale);
+		}
+		return TryAssignBoxedValue(entry, (float)scaledValue / (float)scale);
 	}
 
 	private static bool ValuesEqual(object left, object right)
@@ -2595,45 +2718,19 @@ internal sealed class LobbyConfigPanel
 
 	private bool TryDrawImmediateRangeControlStableV2(ConfigEntryBase entry, Type entryValueType)
 	{
-		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetNumericRange(entry, out var min, out var max))
+		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetScaledNumericRange(entry, entryValueType, out var scaledMin, out var scaledMax, out var scale))
 		{
 			return false;
 		}
-		float num = (float)min;
-		float num2 = (float)max;
 		float immediateRangeControlWidth = GetImmediateRangeControlWidth();
 		float immediateRangeSliderWidth = GetImmediateRangeSliderWidth();
 		GUILayout.BeginHorizontal(GUILayout.Width(immediateRangeControlWidth));
-		if (entryValueType == typeof(int))
+		int scaledNumericValue = GetScaledNumericValue(entry, entryValueType, scale);
+		int num = Mathf.RoundToInt(GUILayout.HorizontalSlider(scaledNumericValue, scaledMin, scaledMax, GUILayout.Width(immediateRangeSliderWidth)));
+		num = Mathf.Clamp(num, scaledMin, scaledMax);
+		if (num != scaledNumericValue && TryAssignScaledNumericValue(entry, entryValueType, num, scale))
 		{
-			int num3 = Convert.ToInt32(GetBoxedValue(entry) ?? 0, CultureInfo.InvariantCulture);
-			int num4 = Mathf.RoundToInt(GUILayout.HorizontalSlider(num3, num, num2, GUILayout.Width(immediateRangeSliderWidth)));
-			num4 = Mathf.Clamp(num4, Mathf.RoundToInt(num), Mathf.RoundToInt(num2));
-			if (num4 != num3)
-			{
-				TryAssignBoxedValue(entry, num4);
-				SaveEntryOwner(entry);
-			}
-		}
-		else if (entryValueType == typeof(double))
-		{
-			double num5 = Convert.ToDouble(GetBoxedValue(entry) ?? 0.0, CultureInfo.InvariantCulture);
-			double num6 = GUILayout.HorizontalSlider((float)num5, num, num2, GUILayout.Width(immediateRangeSliderWidth));
-			if (Math.Abs(num6 - num5) > 0.0001)
-			{
-				TryAssignBoxedValue(entry, num6);
-				SaveEntryOwner(entry);
-			}
-		}
-		else
-		{
-			float num7 = Convert.ToSingle(GetBoxedValue(entry) ?? 0f, CultureInfo.InvariantCulture);
-			float num8 = GUILayout.HorizontalSlider(num7, num, num2, GUILayout.Width(immediateRangeSliderWidth));
-			if (Mathf.Abs(num8 - num7) > 0.0001f)
-			{
-				TryAssignBoxedValue(entry, num8);
-				SaveEntryOwner(entry);
-			}
+			SaveEntryOwner(entry);
 		}
 		GUILayout.Space(10f);
 		GUILayout.Label(GetDisplayValueText(entry), _immediateLabelStyle, GUILayout.Width(70f));
@@ -2679,43 +2776,17 @@ internal sealed class LobbyConfigPanel
 
 	private bool TryDrawImmediateRangeControlStable(ConfigEntryBase entry, Type entryValueType)
 	{
-		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetNumericRange(entry, out var min, out var max))
+		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetScaledNumericRange(entry, entryValueType, out var scaledMin, out var scaledMax, out var scale))
 		{
 			return false;
 		}
-		float num = (float)min;
-		float num2 = (float)max;
 		GUILayout.BeginHorizontal(GUILayout.Width(380f));
-		if (entryValueType == typeof(int))
+		int scaledNumericValue = GetScaledNumericValue(entry, entryValueType, scale);
+		int num = Mathf.RoundToInt(GUILayout.HorizontalSlider(scaledNumericValue, scaledMin, scaledMax, GUILayout.Width(300f)));
+		num = Mathf.Clamp(num, scaledMin, scaledMax);
+		if (num != scaledNumericValue && TryAssignScaledNumericValue(entry, entryValueType, num, scale))
 		{
-			int num3 = Convert.ToInt32(GetBoxedValue(entry) ?? 0, CultureInfo.InvariantCulture);
-			int num4 = Mathf.RoundToInt(GUILayout.HorizontalSlider(num3, num, num2, GUILayout.Width(300f)));
-			num4 = Mathf.Clamp(num4, Mathf.RoundToInt(num), Mathf.RoundToInt(num2));
-			if (num4 != num3)
-			{
-				TryAssignBoxedValue(entry, num4);
-				SaveEntryOwner(entry);
-			}
-		}
-		else if (entryValueType == typeof(double))
-		{
-			double num5 = Convert.ToDouble(GetBoxedValue(entry) ?? 0.0, CultureInfo.InvariantCulture);
-			double num6 = GUILayout.HorizontalSlider((float)num5, num, num2, GUILayout.Width(300f));
-			if (Math.Abs(num6 - num5) > 0.0001)
-			{
-				TryAssignBoxedValue(entry, num6);
-				SaveEntryOwner(entry);
-			}
-		}
-		else
-		{
-			float num7 = Convert.ToSingle(GetBoxedValue(entry) ?? 0f, CultureInfo.InvariantCulture);
-			float num8 = GUILayout.HorizontalSlider(num7, num, num2, GUILayout.Width(300f));
-			if (Mathf.Abs(num8 - num7) > 0.0001f)
-			{
-				TryAssignBoxedValue(entry, num8);
-				SaveEntryOwner(entry);
-			}
+			SaveEntryOwner(entry);
 		}
 		GUILayout.Space(10f);
 		GUILayout.Label(GetDisplayValueText(entry), GUILayout.Width(70f));
@@ -2841,43 +2912,17 @@ internal sealed class LobbyConfigPanel
 
 	private bool TryDrawImmediateRangeControl(ConfigEntryBase entry, Type entryValueType)
 	{
-		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetNumericRange(entry, out var min, out var max))
+		if ((entryValueType != typeof(int) && entryValueType != typeof(float) && entryValueType != typeof(double)) || !TryGetScaledNumericRange(entry, entryValueType, out var scaledMin, out var scaledMax, out var scale))
 		{
 			return false;
 		}
-		float num = (float)min;
-		float num2 = (float)max;
 		GUILayout.BeginHorizontal(GUILayout.Width(320f));
-		if (entryValueType == typeof(int))
+		int scaledNumericValue = GetScaledNumericValue(entry, entryValueType, scale);
+		int num = Mathf.RoundToInt(GUILayout.HorizontalSlider(scaledNumericValue, scaledMin, scaledMax, GUILayout.Width(240f)));
+		num = Mathf.Clamp(num, scaledMin, scaledMax);
+		if (num != scaledNumericValue && TryAssignScaledNumericValue(entry, entryValueType, num, scale))
 		{
-			int num3 = Convert.ToInt32(GetBoxedValue(entry) ?? 0, CultureInfo.InvariantCulture);
-			int num4 = Mathf.RoundToInt(GUILayout.HorizontalSlider(num3, num, num2, GUILayout.Width(240f)));
-			num4 = Mathf.Clamp(num4, Mathf.RoundToInt(num), Mathf.RoundToInt(num2));
-			if (num4 != num3)
-			{
-				TryAssignBoxedValue(entry, num4);
-				SaveEntryOwner(entry);
-			}
-		}
-		else if (entryValueType == typeof(double))
-		{
-			double num5 = Convert.ToDouble(GetBoxedValue(entry) ?? 0.0, CultureInfo.InvariantCulture);
-			double num6 = GUILayout.HorizontalSlider((float)num5, num, num2, GUILayout.Width(240f));
-			if (Math.Abs(num6 - num5) > 0.0001)
-			{
-				TryAssignBoxedValue(entry, num6);
-				SaveEntryOwner(entry);
-			}
-		}
-		else
-		{
-			float num7 = Convert.ToSingle(GetBoxedValue(entry) ?? 0f, CultureInfo.InvariantCulture);
-			float num8 = GUILayout.HorizontalSlider(num7, num, num2, GUILayout.Width(240f));
-			if (Mathf.Abs(num8 - num7) > 0.0001f)
-			{
-				TryAssignBoxedValue(entry, num8);
-				SaveEntryOwner(entry);
-			}
+			SaveEntryOwner(entry);
 		}
 		GUILayout.Space(10f);
 		GUILayout.Label(GetDisplayValueText(entry), GUILayout.Width(70f));

@@ -28,7 +28,7 @@ using RoomPlayer = Photon.Realtime.Player;
 
 namespace ShootZombies;
 
-[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.0")]
+[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.2")]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Core", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Items", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("PEAKModding.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -252,7 +252,7 @@ public class Plugin : BaseUnityPlugin
 
 	public const string Name = "ShootZombies";
 
-	public const string Version = "1.3.0";
+	public const string Version = "1.3.2";
 
 	private const string CanonicalConfigFileName = "Thanks.ShootZombies.cfg";
 
