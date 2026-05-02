@@ -15,9 +15,15 @@ internal static class AkUiPatchHelpers
 
 	private static readonly FieldInfo InventoryItemDataField = typeof(InventoryItemUI).GetField("_itemData", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
 
+	private static readonly FieldInfo ItemDataField = typeof(Item).GetField("data", ReflectionFlags);
+
+	private static readonly PropertyInfo ItemDataProperty = typeof(Item).GetProperty("data", ReflectionFlags);
+
 	private static readonly PropertyInfo SlotItemProperty = typeof(ItemSlot).GetProperty("item", ReflectionFlags);
 
 	private static readonly FieldInfo SlotItemField = typeof(ItemSlot).GetField("item", ReflectionFlags);
+
+	private static readonly FieldInfo SliceItemSlotField = typeof(BackpackWheelSlice).GetField("itemSlot", ReflectionFlags);
 
 	private static readonly Dictionary<Type, PropertyInfo> InventoryItemDataItemPropertyCache = new Dictionary<Type, PropertyInfo>();
 
@@ -270,6 +276,27 @@ internal static class AkUiPatchHelpers
 		return flag;
 	}
 
+	internal static void ClearInventoryUiCache(InventoryItemUI ui)
+	{
+		if ((Object)(object)ui == (Object)null)
+		{
+			return;
+		}
+		InventoryUiSourceKeyCache.Remove(((Object)ui).GetInstanceID());
+	}
+
+	internal static void ClearRuntimeCaches()
+	{
+		InventoryUiSourceKeyCache.Clear();
+		SliceSourceKeyCache.Clear();
+		TrackedInventoryUis.Clear();
+		TrackedSlices.Clear();
+		TrackedWheels.Clear();
+		StaleInventoryUis.Clear();
+		StaleSlices.Clear();
+		StaleWheels.Clear();
+	}
+
 	private static Item ResolveItemFromItemData(object itemData)
 	{
 		if (itemData == null)
@@ -303,7 +330,7 @@ internal static class AkUiPatchHelpers
 		return 0;
 	}
 
-	private static bool IsInventoryUiAlreadyShowingAk(InventoryItemUI ui)
+	internal static bool IsInventoryUiAlreadyShowingAk(InventoryItemUI ui)
 	{
 		if ((Object)(object)ui == (Object)null)
 		{
@@ -339,7 +366,7 @@ internal static class AkUiPatchHelpers
 		if (!((Object)ui.icon == (Object)null))
 		{
 			ui.icon.texture = itemIcon;
-			((Graphic)(object)ui.icon).color = Color.white;
+			((Graphic)(object)ui.icon).color = ResolveInventoryIconColor(ui, Color.white);
 			((Graphic)(object)ui.icon).material = null;
 			ui.icon.uvRect = FullUvRect;
 			((Behaviour)ui.icon).enabled = (Object)itemIcon != (Object)null;
@@ -375,7 +402,7 @@ internal static class AkUiPatchHelpers
 		}
 		Texture itemIcon = ResolveDefaultItemIcon(item);
 		slice.image.texture = itemIcon;
-		((Graphic)(object)slice.image).color = Color.white;
+		((Graphic)(object)slice.image).color = ResolveSliceIconColor(slice, Color.white);
 		((Graphic)(object)slice.image).material = null;
 		slice.image.uvRect = FullUvRect;
 		((Behaviour)slice.image).enabled = (Object)itemIcon != (Object)null;
@@ -394,7 +421,7 @@ internal static class AkUiPatchHelpers
 		}
 		Texture itemIcon = ResolveDefaultItemIcon(item);
 		currentlyHeldItem.texture = itemIcon;
-		((Graphic)(object)currentlyHeldItem).color = Color.white;
+		((Graphic)(object)currentlyHeldItem).color = ResolveItemIconColor(item, Color.white);
 		((Graphic)(object)currentlyHeldItem).material = null;
 		currentlyHeldItem.uvRect = FullUvRect;
 		((Behaviour)currentlyHeldItem).enabled = (Object)itemIcon != (Object)null;
@@ -414,6 +441,60 @@ internal static class AkUiPatchHelpers
 		{
 			return (Texture)(object)item.UIData.icon;
 		}
+	}
+
+	private static Color ResolveInventoryIconColor(InventoryItemUI ui, Color fallback)
+	{
+		if ((Object)(object)ui == (Object)null)
+		{
+			return fallback;
+		}
+		try
+		{
+			object itemData = InventoryItemDataField?.GetValue(ui);
+			return TryGetCookColor(itemData, out var color) ? color : fallback;
+		}
+		catch
+		{
+			return fallback;
+		}
+	}
+
+	private static Color ResolveSliceIconColor(BackpackWheelSlice slice, Color fallback)
+	{
+		ItemSlot itemSlot = ResolveItemSlotFromSlice(slice);
+		return itemSlot != null && TryGetCookColor(itemSlot.data, out var color) ? color : fallback;
+	}
+
+	private static Color ResolveItemIconColor(Item item, Color fallback)
+	{
+		if ((Object)item == (Object)null)
+		{
+			return fallback;
+		}
+		try
+		{
+			object itemData = ItemDataField?.GetValue(item) ?? ItemDataProperty?.GetValue(item);
+			return TryGetCookColor(itemData, out var color) ? color : fallback;
+		}
+		catch
+		{
+			return fallback;
+		}
+	}
+
+	private static bool TryGetCookColor(object itemData, out Color color)
+	{
+		color = Color.white;
+		if (itemData is ItemInstanceData data
+			&& data.TryGetDataEntry<IntItemData>(DataEntryKey.CookedAmount, out var cooked)
+			&& cooked != null
+			&& cooked.Value > 0)
+		{
+			color = ItemCooking.GetCookColor(cooked.Value);
+			return true;
+		}
+		return false;
 	}
 
 	private static string ResolveDefaultItemName(Item item)
@@ -486,6 +567,22 @@ internal static class AkUiPatchHelpers
 		{
 		}
 		return null;
+	}
+
+	private static ItemSlot ResolveItemSlotFromSlice(BackpackWheelSlice slice)
+	{
+		if ((Object)(object)slice == (Object)null || SliceItemSlotField == null)
+		{
+			return null;
+		}
+		try
+		{
+			return SliceItemSlotField.GetValue(slice) as ItemSlot;
+		}
+		catch
+		{
+			return null;
+		}
 	}
 
 	private static void TrackInventoryUi(InventoryItemUI ui)

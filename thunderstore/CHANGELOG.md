@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.4] - 2026-05-02
+
+- Reduced repeated inventory UI refresh work with more precise SetItem state tracking.
+- Prevented repeated zombie death cleanup while destroyed zombies are still present for follow-up frames.
+- Cleared runtime UI and zombie caches on scene transitions and plugin shutdown.
+- Preserved cooked item colors when restoring non-weapon inventory and backpack wheel icons.
+
 ## [1.3.0] - 2026-04-26
 
 - Added three selectable weapon models: `AK47`, `HK416`, and `MPX`.

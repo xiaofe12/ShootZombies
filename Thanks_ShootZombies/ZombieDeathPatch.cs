@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Reflection;
 using HarmonyLib;
 using Photon.Pun;
 using UnityEngine;
@@ -10,7 +9,9 @@ namespace ShootZombies;
 [HarmonyPatch(typeof(MushroomZombie), "Update")]
 public static class ZombieDeathPatch
 {
-	private static HashSet<GameObject> _processedZombies = new HashSet<GameObject>();
+	private static readonly HashSet<int> ProcessedZombieIds = new HashSet<int>();
+
+	private static readonly Dictionary<int, Character> ZombieCharacterCache = new Dictionary<int, Character>();
 
 	[HarmonyPostfix]
 	public static void Postfix(MushroomZombie __instance)
@@ -22,43 +23,37 @@ public static class ZombieDeathPatch
 		try
 		{
 			GameObject gameObject = ((Component)__instance).gameObject;
-			if ((Object)gameObject == (Object)null || _processedZombies.Contains(gameObject))
+			if ((Object)gameObject == (Object)null)
 			{
 				return;
 			}
-			Character component = ((Component)__instance).GetComponent<Character>();
-			if ((Object)component == (Object)null)
+			int instanceID = ((Object)__instance).GetInstanceID();
+			if (ProcessedZombieIds.Contains(instanceID))
 			{
 				return;
 			}
-			bool flag = false;
-			if ((Object)component.data != (Object)null && component.data.dead)
+			Character component;
+			if (!ZombieCharacterCache.TryGetValue(instanceID, out component) || (Object)component == (Object)null)
 			{
-				flag = true;
-			}
-			FieldInfo field = ((object)component).GetType().GetField("data", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-			if (field != null)
-			{
-				object value = field.GetValue(component);
-				if (value != null)
+				component = ((Component)__instance).GetComponent<Character>();
+				if ((Object)component == (Object)null)
 				{
-					FieldInfo field2 = value.GetType().GetField("dead", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-					if (field2 != null)
-					{
-						flag = (bool)field2.GetValue(value);
-					}
+					ZombieCharacterCache.Remove(instanceID);
+					return;
 				}
+				ZombieCharacterCache[instanceID] = component;
 			}
-			if (!flag)
+			CharacterData data = component.data;
+			if ((Object)data == (Object)null || !data.dead)
 			{
 				return;
 			}
-			_processedZombies.Add(gameObject);
+			ProcessedZombieIds.Add(instanceID);
+			ZombieCharacterCache.Remove(instanceID);
 			if (!((Object)gameObject != (Object)null))
 			{
 				return;
 			}
-			_processedZombies.Remove(gameObject);
 			ZombieSpawner.RemoveZombie(gameObject);
 			if (PhotonNetwork.IsMasterClient)
 			{
@@ -77,5 +72,10 @@ public static class ZombieDeathPatch
 		{
 		}
 	}
-}
 
+	internal static void ClearCaches()
+	{
+		ProcessedZombieIds.Clear();
+		ZombieCharacterCache.Clear();
+	}
+}

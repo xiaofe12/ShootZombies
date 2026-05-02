@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Linq;
 using System.Reflection;
 using HarmonyLib;
@@ -9,9 +10,17 @@ namespace ShootZombies;
 [HarmonyPatch]
 public static class ItemUIDataPatch
 {
+	private const float VisibleUiRefreshCooldown = 0.5f;
+
 	private static MethodBase _targetMethod;
 
 	private static bool _hasPerformedFallbackVisibleUiScan;
+
+	private static float _lastVisibleUiRefreshTime = -999f;
+
+	private static bool _pendingVisibleUiRefresh;
+
+	private static Coroutine _deferredVisibleUiRefreshCoroutine;
 
 	public static MethodBase TargetMethod()
 	{
@@ -73,8 +82,23 @@ public static class ItemUIDataPatch
 	{
 		if (Plugin.IsRuntimeVisualRefreshBlocked())
 		{
+			_pendingVisibleUiRefresh = true;
+			ScheduleDeferredVisibleUiRefresh();
 			return;
 		}
+		float now = Time.unscaledTime;
+		if (now - _lastVisibleUiRefreshTime < VisibleUiRefreshCooldown)
+		{
+			_pendingVisibleUiRefresh = true;
+			ScheduleDeferredVisibleUiRefresh();
+			return;
+		}
+		RefreshVisibleUiNow();
+	}
+
+	private static void RefreshVisibleUiNow()
+	{
+		_lastVisibleUiRefreshTime = Time.unscaledTime;
 		try
 		{
 			Plugin.GetAkIconTexture();
@@ -87,6 +111,47 @@ public static class ItemUIDataPatch
 		{
 			Plugin.Log.LogWarning((object)("[ShootZombies] ForceRefreshVisibleUi failed: " + ex.Message));
 		}
+	}
+
+	private static void ScheduleDeferredVisibleUiRefresh()
+	{
+		if (_deferredVisibleUiRefreshCoroutine != null)
+		{
+			return;
+		}
+		Plugin plugin = Plugin.Instance;
+		if ((Object)(object)plugin == (Object)null)
+		{
+			return;
+		}
+		_deferredVisibleUiRefreshCoroutine = ((MonoBehaviour)plugin).StartCoroutine(DeferredVisibleUiRefresh());
+	}
+
+	private static IEnumerator DeferredVisibleUiRefresh()
+	{
+		while (_pendingVisibleUiRefresh)
+		{
+			float waitTime = VisibleUiRefreshCooldown - (Time.unscaledTime - _lastVisibleUiRefreshTime);
+			if (waitTime > 0f)
+			{
+				yield return (object)new WaitForSecondsRealtime(waitTime);
+			}
+			else
+			{
+				yield return null;
+			}
+			if (!_pendingVisibleUiRefresh)
+			{
+				break;
+			}
+			if (Plugin.IsRuntimeVisualRefreshBlocked())
+			{
+				continue;
+			}
+			_pendingVisibleUiRefresh = false;
+			RefreshVisibleUiNow();
+		}
+		_deferredVisibleUiRefreshCoroutine = null;
 	}
 
 	private static void FallbackScanVisibleUiOnce()
@@ -112,5 +177,7 @@ public static class ItemUIDataPatch
 	internal static void ResetVisibleUiTrackingFallback()
 	{
 		_hasPerformedFallbackVisibleUiScan = false;
+		_pendingVisibleUiRefresh = false;
+		_lastVisibleUiRefreshTime = -999f;
 	}
 }

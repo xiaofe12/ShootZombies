@@ -28,7 +28,7 @@ using RoomPlayer = Photon.Realtime.Player;
 
 namespace ShootZombies;
 
-[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.2")]
+[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.4")]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Core", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Items", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("PEAKModding.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -252,7 +252,7 @@ public class Plugin : BaseUnityPlugin
 
 	public const string Name = "ShootZombies";
 
-	public const string Version = "1.3.2";
+	public const string Version = "1.3.4";
 
 	private const string CanonicalConfigFileName = "Thanks.ShootZombies.cfg";
 
@@ -3220,6 +3220,7 @@ public class Plugin : BaseUnityPlugin
 		CleanupMuzzleFlashPool();
 		CleanupRemoteGunshotAudioPool();
 		CleanupDartImpactVfxPool();
+		ClearRuntimePatchCaches();
 		_lobbyConfigPanel?.Dispose();
 		_lobbyConfigPanel = null;
 	}
@@ -3237,6 +3238,7 @@ public class Plugin : BaseUnityPlugin
 		}
 		_activeSceneBucket = sceneBucket;
 		BeginSceneRuntimeWarmup(scene);
+		ClearRuntimePatchCaches();
 		if (_scanCoroutine != null)
 		{
 			((MonoBehaviour)this).StopCoroutine(_scanCoroutine);
@@ -3272,6 +3274,13 @@ public class Plugin : BaseUnityPlugin
 		{
 			((MonoBehaviour)this).StartCoroutine(RefreshLocalizedUiAfterStartup());
 		}
+	}
+
+	private static void ClearRuntimePatchCaches()
+	{
+		InventoryItemUiPatch.ClearCaches();
+		AkUiPatchHelpers.ClearRuntimeCaches();
+		ZombieDeathPatch.ClearCaches();
 	}
 
 	private static void ResetLoadoutGrantTracking(bool clearPersistentRecords)
