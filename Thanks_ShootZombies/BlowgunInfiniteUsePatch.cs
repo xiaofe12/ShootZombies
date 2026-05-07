@@ -26,43 +26,11 @@ public class BlowgunInfiniteUsePatch
 	{
 		try
 		{
-			if (!ItemPatch.IsBlowgunLike(__instance, __instance?.GetName()))
+			if (!Plugin.IsWeaponFeatureEnabled() || !ItemPatch.IsBlowgunLike(__instance, __instance?.GetName()))
 			{
 				return;
 			}
-			MethodInfo methodInfo = (from m in typeof(Item).GetMethods(BindingFlags.Instance | BindingFlags.Public)
-				where m.Name == "GetData"
-				select m).ToList().FirstOrDefault((MethodInfo m) => m.IsGenericMethod);
-			if (methodInfo != null)
-			{
-				Type type = typeof(Item).Assembly.GetTypes().FirstOrDefault((Type t) => t.Name == "OptionableIntItemData");
-				if (type != null)
-				{
-					MethodInfo methodInfo2 = methodInfo.MakeGenericMethod(type);
-					ParameterInfo[] parameters = methodInfo2.GetParameters();
-					object[] array = new object[parameters.Length];
-					for (int num = 0; num < parameters.Length; num++)
-					{
-						if (parameters[num].ParameterType == typeof(DataEntryKey))
-						{
-							array[num] = (object)(DataEntryKey)2;
-						}
-						else
-						{
-							array[num] = null;
-						}
-					}
-					object obj = methodInfo2.Invoke(__instance, array);
-					if (obj != null)
-					{
-						FieldInfo field = obj.GetType().GetField("Value", BindingFlags.Instance | BindingFlags.Public);
-						if (field != null)
-						{
-							field.SetValue(obj, 9999);
-						}
-					}
-				}
-			}
+			SetBlowgunUseCount(__instance, 9999);
 			Type type2 = __instance.GetType();
 			float num2 = Plugin.FireInterval?.Value ?? 0.4f;
 			FieldInfo field2 = type2.GetField("usingTimePrimary", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
@@ -73,6 +41,77 @@ public class BlowgunInfiniteUsePatch
 		}
 		catch (Exception)
 		{
+		}
+	}
+
+	internal static void RestoreVanillaSingleUseOnAllBlowguns()
+	{
+		try
+		{
+			Item[] array = UnityEngine.Object.FindObjectsByType<Item>((FindObjectsSortMode)0);
+			foreach (Item item in array)
+			{
+				RestoreVanillaSingleUse(item);
+			}
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static void RestoreVanillaSingleUse(Item item)
+	{
+		try
+		{
+			if (!ItemPatch.IsBlowgunLike(item, item?.GetName()))
+			{
+				return;
+			}
+			SetBlowgunUseCount(item, 1);
+		}
+		catch (Exception)
+		{
+		}
+	}
+
+	private static void SetBlowgunUseCount(Item item, int value)
+	{
+		if ((UnityEngine.Object)item == (UnityEngine.Object)null)
+		{
+			return;
+		}
+		MethodInfo methodInfo = (from m in typeof(Item).GetMethods(BindingFlags.Instance | BindingFlags.Public)
+			where m.Name == "GetData"
+			select m).ToList().FirstOrDefault((MethodInfo m) => m.IsGenericMethod);
+		if (methodInfo != null)
+		{
+			Type type = typeof(Item).Assembly.GetTypes().FirstOrDefault((Type t) => t.Name == "OptionableIntItemData");
+			if (type != null)
+			{
+				MethodInfo methodInfo2 = methodInfo.MakeGenericMethod(type);
+				ParameterInfo[] parameters = methodInfo2.GetParameters();
+				object[] array = new object[parameters.Length];
+				for (int num = 0; num < parameters.Length; num++)
+				{
+					if (parameters[num].ParameterType == typeof(DataEntryKey))
+					{
+						array[num] = (object)(DataEntryKey)2;
+					}
+					else
+					{
+						array[num] = null;
+					}
+				}
+				object obj = methodInfo2.Invoke(item, array);
+				if (obj != null)
+				{
+					FieldInfo field = obj.GetType().GetField("Value", BindingFlags.Instance | BindingFlags.Public);
+					if (field != null)
+					{
+						field.SetValue(obj, value);
+					}
+				}
+			}
 		}
 	}
 }

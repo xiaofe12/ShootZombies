@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.3.5] - 2026-05-07
+
+- Restored vanilla single-use blowgun behavior when the mod or weapon feature is disabled.
+
 ## [1.3.4] - 2026-05-02
 
 - Reduced repeated inventory UI refresh work with more precise SetItem state tracking.

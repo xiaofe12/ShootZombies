@@ -28,7 +28,7 @@ using RoomPlayer = Photon.Realtime.Player;
 
 namespace ShootZombies;
 
-[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.4")]
+[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.5")]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Core", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Items", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -253,7 +253,7 @@ public class Plugin : BaseUnityPlugin
 
 	public const string Name = "ShootZombies";
 
-	public const string Version = "1.3.4";
+	public const string Version = "1.3.5";
 
 	private const string CanonicalConfigFileName = "Thanks.ShootZombies.cfg";
 
@@ -7396,6 +7396,10 @@ public class Plugin : BaseUnityPlugin
 		_lastZombieBehaviorDifficulty = NormalizeZombieBehaviorDifficultySelection(ZombieBehaviorDifficulty.Value);
 		_lastModEnabled = ModEnabled?.Value ?? true;
 		_lastWeaponEnabled = WeaponEnabled?.Value ?? true;
+		if (!IsWeaponFeatureEnabled())
+		{
+			BlowgunInfiniteUsePatch.RestoreVanillaSingleUseOnAllBlowguns();
+		}
 		_lastWeaponSelection = GetCurrentWeaponSelection();
 		ApplySelectedWeaponAssets();
 		_lastWeaponModelPitch = GetWeaponModelPitch();
@@ -10412,6 +10416,7 @@ public class Plugin : BaseUnityPlugin
 			else
 			{
 				ZombieSpawner.StopZombieSpawning();
+				BlowgunInfiniteUsePatch.RestoreVanillaSingleUseOnAllBlowguns();
 				CleanupLocalWeaponVisual();
 				_hasWeapon = false;
 			}
@@ -10422,6 +10427,7 @@ public class Plugin : BaseUnityPlugin
 			_lastWeaponEnabled = WeaponEnabled.Value;
 			if (!_lastWeaponEnabled)
 			{
+				BlowgunInfiniteUsePatch.RestoreVanillaSingleUseOnAllBlowguns();
 				CleanupLocalWeaponVisual();
 				_hasWeapon = false;
 			}
