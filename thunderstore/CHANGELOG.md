@@ -6,6 +6,7 @@
 - Prevented repeated zombie death cleanup while destroyed zombies are still present for follow-up frames.
 - Cleared runtime UI and zombie caches on scene transitions and plugin shutdown.
 - Preserved cooked item colors when restoring non-weapon inventory and backpack wheel icons.
+- Kept BepInEx config section and key definitions in stable English so PEAKLib.ModConfig can render this mod and following mods reliably.
 
 ## [1.3.0] - 2026-04-26
 

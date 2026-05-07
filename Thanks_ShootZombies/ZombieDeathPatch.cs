@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using HarmonyLib;
-using Photon.Pun;
 using UnityEngine;
 
 namespace ShootZombies;
@@ -54,19 +53,7 @@ public static class ZombieDeathPatch
 			{
 				return;
 			}
-			ZombieSpawner.RemoveZombie(gameObject);
-			if (PhotonNetwork.IsMasterClient)
-			{
-				PhotonView component2 = gameObject.GetComponent<PhotonView>();
-				if ((Object)component2 != (Object)null)
-				{
-					PhotonNetwork.Destroy(component2);
-				}
-				else
-				{
-					PhotonNetwork.Destroy(gameObject);
-				}
-			}
+			ZombieSpawner.DestroyZombie(gameObject);
 		}
 		catch (Exception)
 		{
@@ -77,5 +64,15 @@ public static class ZombieDeathPatch
 	{
 		ProcessedZombieIds.Clear();
 		ZombieCharacterCache.Clear();
+	}
+}
+
+[HarmonyPatch(typeof(MushroomZombie), "RPC_SpawnSkelly")]
+public static class ZombieSkeletonSpawnPatch
+{
+	[HarmonyPrefix]
+	public static bool Prefix()
+	{
+		return false;
 	}
 }

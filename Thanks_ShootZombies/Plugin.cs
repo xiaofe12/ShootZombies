@@ -31,6 +31,7 @@ namespace ShootZombies;
 [BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.4")]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Core", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Items", BepInDependency.DependencyFlags.HardDependency)]
+[BepInDependency("com.github.PEAKModding.PEAKLib.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
 [BepInDependency("PEAKModding.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
 public class Plugin : BaseUnityPlugin
 {
@@ -899,7 +900,7 @@ public class Plugin : BaseUnityPlugin
 
 	private static readonly HashSet<ConfigEntryBase> _ownedConfigEntries = new HashSet<ConfigEntryBase>();
 
-	private static readonly bool DisableModConfigRuntimePatches = true;
+	private static readonly bool DisableModConfigRuntimePatches = false;
 
 	private bool _repairingModConfigUi;
 
@@ -1176,6 +1177,7 @@ public class Plugin : BaseUnityPlugin
 			Harmony val = new Harmony("com.github.Thanks.ShootZombies");
 			val.PatchAll(Assembly.GetExecutingAssembly());
 			PatchUpdatedRunMethods(val);
+			PatchModConfigProcessEntriesBug(val);
 			if (!DisableModConfigRuntimePatches)
 			{
 				PatchModConfigUiMethods(val);
@@ -1287,6 +1289,277 @@ public class Plugin : BaseUnityPlugin
 		{
 			Log.LogWarning((object)("[ShootZombies] PatchUpdatedRunMethods failed: " + DescribeReflectionException(ex)));
 		}
+	}
+
+	private void PatchModConfigProcessEntriesBug(Harmony harmony)
+	{
+		if (harmony == null)
+		{
+			return;
+		}
+		try
+		{
+			Type type = ResolveLoadedType("PEAKLib.ModConfig.ModConfigPlugin", "com.github.PEAKModding.PEAKLib.ModConfig");
+			MethodInfo methodInfo = type?.GetMethod("ProcessModEntries", BindingFlags.Static | BindingFlags.NonPublic);
+			MethodInfo methodInfo2 = AccessTools.Method(typeof(Plugin), "ModConfigProcessModEntriesPrefix", Type.EmptyTypes, (Type[])null);
+			if (methodInfo != null && methodInfo2 != null)
+			{
+				harmony.Patch((MethodBase)methodInfo, new HarmonyMethod(methodInfo2), (HarmonyMethod)null, (HarmonyMethod)null, (HarmonyMethod)null, (HarmonyMethod)null);
+			}
+		}
+		catch (Exception ex)
+		{
+			Log.LogWarning((object)("[ShootZombies] PatchModConfigProcessEntriesBug failed: " + DescribeReflectionException(ex)));
+		}
+	}
+
+	private static bool ModConfigProcessModEntriesPrefix()
+	{
+		return !TryProcessModConfigEntriesWithoutEarlyReturn();
+	}
+
+	private static bool TryProcessModConfigEntriesWithoutEarlyReturn()
+	{
+		try
+		{
+			Type type = ResolveLoadedType("PEAKLib.ModConfig.ModConfigPlugin", "com.github.PEAKModding.PEAKLib.ModConfig");
+			if (type == null)
+			{
+				return false;
+			}
+			Type type2 = type.Assembly.GetType("PEAKLib.ModConfig.Components.ModSectionNames");
+			Type type3 = type.Assembly.GetType("PEAKLib.ModConfig.SettingsHandlerUtility");
+			Type type4 = type.Assembly.GetType("PEAKLib.ModConfig.Components.ModKeyToName");
+			if (type2 == null || type3 == null)
+			{
+				return false;
+			}
+			List<ConfigEntryBase> modConfigProcessedEntries = GetModConfigProcessedEntries(type);
+			if (modConfigProcessedEntries == null)
+			{
+				return false;
+			}
+			IList modConfigModdedKeys = GetModConfigModdedKeys(type);
+			MethodInfo method = type2.GetMethod("SetMod", BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+			MethodInfo methodInfo = type2.GetMethod("CheckSectionName", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+			if (method == null || methodInfo == null)
+			{
+				return false;
+			}
+			HashSet<string> hashSet = new HashSet<string>(StringComparer.Ordinal);
+			foreach (PluginInfo item in Chainloader.PluginInfos.Values.OrderBy((PluginInfo p) => p.Metadata?.Name))
+			{
+				if (item?.Instance == null || item.Instance.Config == null)
+				{
+					continue;
+				}
+				string text = FixModConfigPluginName(item.Metadata?.Name);
+				if (string.IsNullOrWhiteSpace(text) || !hashSet.Add(text))
+				{
+					continue;
+				}
+				object obj = method.Invoke(null, new object[1] { text });
+				foreach (KeyValuePair<ConfigDefinition, ConfigEntryBase> item2 in item.Instance.Config)
+				{
+					ConfigEntryBase value = item2.Value;
+					if (value == null || !ShouldExposeModConfigEntry(value) || modConfigProcessedEntries.Contains(value))
+					{
+						continue;
+					}
+					try
+					{
+						methodInfo.Invoke(obj, new object[1] { value.Definition.Section });
+						RegisterModConfigEntry(type, type3, type4, modConfigModdedKeys, value, text);
+						modConfigProcessedEntries.Add(value);
+					}
+					catch (Exception ex)
+					{
+						Log?.LogWarning((object)("[ShootZombies] ModConfig entry registration failed for [" + text + "] " + value.Definition.Key + ": " + DescribeReflectionException(ex)));
+					}
+				}
+			}
+			return true;
+		}
+		catch (Exception ex2)
+		{
+			Log?.LogWarning((object)("[ShootZombies] TryProcessModConfigEntriesWithoutEarlyReturn failed: " + DescribeReflectionException(ex2)));
+			return false;
+		}
+	}
+
+	private static List<ConfigEntryBase> GetModConfigProcessedEntries(Type modConfigPluginType)
+	{
+		return GetStaticModConfigMemberValue(modConfigPluginType, "EntriesProcessed", "<EntriesProcessed>k__BackingField") as List<ConfigEntryBase>;
+	}
+
+	private static IList GetModConfigModdedKeys(Type modConfigPluginType)
+	{
+		return GetStaticModConfigMemberValue(modConfigPluginType, "ModdedKeys", "<ModdedKeys>k__BackingField") as IList;
+	}
+
+	private static object GetStaticModConfigMemberValue(Type type, string propertyName, string fieldName)
+	{
+		if (type == null)
+		{
+			return null;
+		}
+		PropertyInfo property = type.GetProperty(propertyName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+		if (property != null)
+		{
+			return property.GetValue(null);
+		}
+		return type.GetField(fieldName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(null);
+	}
+
+	private static bool ShouldExposeModConfigEntry(ConfigEntryBase entry)
+	{
+		object[] tags = entry?.Description?.Tags;
+		return tags == null || !tags.Contains("Hidden");
+	}
+
+	private static void RegisterModConfigEntry(Type modConfigPluginType, Type settingsUtilityType, Type modKeyToNameType, IList moddedKeys, ConfigEntryBase entry, string tabName)
+	{
+		Type settingType = entry.SettingType;
+		if (settingType == typeof(bool))
+		{
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddBoolToTab", entry, tabName, new Action<bool>(delegate(bool newVal)
+			{
+				entry.BoxedValue = newVal;
+			}));
+			return;
+		}
+		if (settingType == typeof(float))
+		{
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddFloatToTab", entry, tabName, new Action<float>(delegate(float newVal)
+			{
+				entry.BoxedValue = newVal;
+			}));
+			return;
+		}
+		if (settingType == typeof(double))
+		{
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddDoubleToTab", entry, tabName, new Action<double>(delegate(double newVal)
+			{
+				entry.BoxedValue = newVal;
+			}));
+			return;
+		}
+		if (settingType == typeof(int))
+		{
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddIntToTab", entry, tabName, new Action<int>(delegate(int newVal)
+			{
+				entry.BoxedValue = newVal;
+			}));
+			return;
+		}
+		if (settingType == typeof(string))
+		{
+			string text = (entry.DefaultValue as string) ?? string.Empty;
+			if (text.Length > 4 && IsValidModConfigInputPath(modConfigPluginType, text))
+			{
+				TryAddModConfigModdedKey(modKeyToNameType, moddedKeys, entry, tabName);
+			}
+			Action<string> action = delegate(string newVal)
+			{
+				entry.BoxedValue = newVal;
+			};
+			if (entry.Description?.AcceptableValues is AcceptableValueList<string>)
+			{
+				InvokeModConfigSettingMethod(settingsUtilityType, "AddEnumToTab", entry, tabName, false, action);
+			}
+			else
+			{
+				InvokeModConfigSettingMethod(settingsUtilityType, "AddStringToTab", entry, tabName, action);
+			}
+			return;
+		}
+		if (settingType == typeof(KeyCode))
+		{
+			TryAddModConfigModdedKey(modKeyToNameType, moddedKeys, entry, tabName);
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddKeybindToTab", entry, tabName, new Action<KeyCode>(delegate(KeyCode newVal)
+			{
+				entry.BoxedValue = newVal;
+			}));
+			return;
+		}
+		if (settingType.IsEnum)
+		{
+			InvokeModConfigSettingMethod(settingsUtilityType, "AddEnumToTab", entry, tabName, true, new Action<string>(delegate(string newVal)
+			{
+				try
+				{
+					entry.BoxedValue = Enum.Parse(settingType, newVal);
+				}
+				catch
+				{
+				}
+			}));
+			return;
+		}
+		Log?.LogWarning((object)$"[ShootZombies] Missing ModConfig SettingType: [Mod: {tabName}] {entry.Definition.Key} (Type: {entry.SettingType})");
+	}
+
+	private static void InvokeModConfigSettingMethod(Type settingsUtilityType, string methodName, params object[] args)
+	{
+		MethodInfo method = settingsUtilityType?.GetMethod(methodName, BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic);
+		if (method == null)
+		{
+			throw new MissingMethodException(settingsUtilityType?.FullName ?? "PEAKLib.ModConfig.SettingsHandlerUtility", methodName);
+		}
+		try
+		{
+			method.Invoke(null, args);
+		}
+		catch (TargetInvocationException ex)
+		{
+			throw ex.InnerException ?? ex;
+		}
+	}
+
+	private static void TryAddModConfigModdedKey(Type modKeyToNameType, IList moddedKeys, ConfigEntryBase entry, string tabName)
+	{
+		if (modKeyToNameType == null || moddedKeys == null || entry == null)
+		{
+			return;
+		}
+		try
+		{
+			ConstructorInfo constructor = modKeyToNameType.GetConstructor(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic, null, new Type[2]
+			{
+				typeof(ConfigEntryBase),
+				typeof(string)
+			}, null);
+			if (constructor != null)
+			{
+				moddedKeys.Add(constructor.Invoke(new object[2] { entry, tabName }));
+			}
+		}
+		catch
+		{
+		}
+	}
+
+	private static bool IsValidModConfigInputPath(Type modConfigPluginType, string path)
+	{
+		try
+		{
+			MethodInfo method = modConfigPluginType?.GetMethod("IsValidPath", BindingFlags.Static | BindingFlags.NonPublic);
+			return method != null && method.Invoke(null, new object[1] { path }) is bool result && result;
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private static string FixModConfigPluginName(string input)
+	{
+		input = input ?? string.Empty;
+		input = System.Text.RegularExpressions.Regex.Replace(input, "([a-z])([A-Z])", "$1 $2");
+		input = System.Text.RegularExpressions.Regex.Replace(input, "([A-Z])([A-Z][a-z])", "$1 $2");
+		input = System.Text.RegularExpressions.Regex.Replace(input, "\\s+", " ");
+		input = System.Text.RegularExpressions.Regex.Replace(input, "([A-Z]\\.)\\s([A-Z]\\.)", "$1$2");
+		return input.Trim();
 	}
 
 	private static void UpdatedRunLifecyclePostfix()
@@ -3084,20 +3357,19 @@ public class Plugin : BaseUnityPlugin
 		return ((BaseUnityPlugin)this).Config.Bind<int>(section, key, defaultValue, new ConfigDescription(GetLocalizedDescription(key, isChinese: false), (AcceptableValueBase)(object)new AcceptableValueRange<int>(minValue, maxValue), Array.Empty<object>()));
 	}
 
+	private ConfigEntry<string> BindSelectableString(string section, string key, string defaultValue, string[] values)
+	{
+		return ((BaseUnityPlugin)this).Config.Bind<string>(section, key, defaultValue, new ConfigDescription(GetLocalizedDescription(key, isChinese: false), (AcceptableValueBase)(object)new AcceptableValueList<string>(values ?? Array.Empty<string>()), Array.Empty<object>()));
+	}
+
 	private static string GetConfigBindingSectionName(string canonicalSection, bool isChinese)
 	{
-		string localizedSectionName = GetLocalizedSectionName(canonicalSection, isChinese);
-		return string.IsNullOrWhiteSpace(localizedSectionName) ? canonicalSection : localizedSectionName;
+		return NormalizeSectionAlias(canonicalSection);
 	}
 
 	private static string GetConfigBindingKeyName(string canonicalKey, bool isChinese)
 	{
-		if (!isChinese)
-		{
-			return canonicalKey;
-		}
-		string localizedKeyName = GetLocalizedKeyName(canonicalKey, isChinese);
-		return string.IsNullOrWhiteSpace(localizedKeyName) ? canonicalKey : localizedKeyName;
+		return NormalizeConfigKeyAlias(canonicalKey);
 	}
 
 	private static void NormalizeConfigRanges()
@@ -3132,7 +3404,7 @@ public class Plugin : BaseUnityPlugin
 		string configBindingSectionName3 = GetConfigBindingSectionName(ZombieConfigSectionName, isChinese);
 		ModEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>(configBindingSectionName, GetConfigBindingKeyName("Mod", isChinese), true, GetLocalizedDescription("Mod", isChinese: false));
 		OpenConfigPanelKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>(configBindingSectionName, GetConfigBindingKeyName("Open Config Panel", isChinese), KeyCode.Backslash, GetLocalizedDescription("Open Config Panel", isChinese: false));
-		ConfigPanelTheme = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName, GetConfigBindingKeyName("Config Panel Theme", isChinese), DefaultConfigPanelThemeOption, GetLocalizedDescription("Config Panel Theme", isChinese: false));
+		ConfigPanelTheme = BindSelectableString(configBindingSectionName, GetConfigBindingKeyName("Config Panel Theme", isChinese), DefaultConfigPanelThemeOption, ConfigPanelThemeValues);
 		string text0 = LobbyConfigPanel.NormalizeThemeSelectionValue(ConfigPanelTheme.Value);
 		if (!string.Equals(ConfigPanelTheme.Value, text0, StringComparison.Ordinal))
 		{
@@ -3140,7 +3412,7 @@ public class Plugin : BaseUnityPlugin
 			SavePluginConfigQuietly();
 		}
 		WeaponEnabled = ((BaseUnityPlugin)this).Config.Bind<bool>(configBindingSectionName2, GetConfigBindingKeyName("Weapon", isChinese), true, GetLocalizedDescription("Weapon", isChinese: false));
-		WeaponSelection = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName2, GetConfigBindingKeyName("Weapon Selection", isChinese), DefaultWeaponSelection, GetLocalizedDescription("Weapon Selection", isChinese: false));
+		WeaponSelection = BindSelectableString(configBindingSectionName2, GetConfigBindingKeyName("Weapon Selection", isChinese), DefaultWeaponSelection, WeaponSelectionValues);
 		string text = NormalizeWeaponSelection(WeaponSelection.Value);
 		if (!string.Equals(WeaponSelection.Value, text, StringComparison.Ordinal))
 		{
@@ -3150,7 +3422,7 @@ public class Plugin : BaseUnityPlugin
 		SpawnWeaponKey = ((BaseUnityPlugin)this).Config.Bind<KeyCode>(configBindingSectionName2, GetConfigBindingKeyName("Spawn Weapon", isChinese), (KeyCode)116, GetLocalizedDescription("Spawn Weapon", isChinese: false));
 		FireInterval = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Fire Interval", isChinese), 0.4f, 0.1f, 3f);
 		FireVolume = BindRangedFloat(configBindingSectionName2, GetConfigBindingKeyName("Fire Volume", isChinese), 0.8f, 0f, 1.5f);
-		AkSoundSelection = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName2, GetConfigBindingKeyName("AK Sound", isChinese), DefaultAkSoundOption, GetLocalizedDescription("AK Sound", isChinese: false));
+		AkSoundSelection = BindSelectableString(configBindingSectionName2, GetConfigBindingKeyName("AK Sound", isChinese), DefaultAkSoundOption, AkSoundSelectionValues);
 		string text2 = NormalizeAkSoundSelection(AkSoundSelection.Value);
 		if (!string.Equals(AkSoundSelection.Value, text2, StringComparison.Ordinal))
 		{
@@ -3190,7 +3462,7 @@ public class Plugin : BaseUnityPlugin
 		ZombieSpawnCount = BindRangedInt(configBindingSectionName3, GetConfigBindingKeyName("Spawn Count", isChinese), DefaultZombieSpawnCount, 0, 30);
 		ZombieSpawnInterval = BindRangedFloat(configBindingSectionName3, GetConfigBindingKeyName("Spawn Interval", isChinese), 15f, 1f, 120f);
 		ZombieMaxLifetime = BindRangedFloat(configBindingSectionName3, GetConfigBindingKeyName("Max Lifetime", isChinese), 120f, 10f, 600f);
-		ZombieBehaviorDifficulty = ((BaseUnityPlugin)this).Config.Bind<string>(configBindingSectionName3, GetConfigBindingKeyName("Behavior Difficulty", isChinese), DefaultZombieBehaviorDifficulty, GetLocalizedDescription("Behavior Difficulty", isChinese: false));
+		ZombieBehaviorDifficulty = BindSelectableString(configBindingSectionName3, GetConfigBindingKeyName("Behavior Difficulty", isChinese), DefaultZombieBehaviorDifficulty, ZombieBehaviorDifficultyValues);
 		string text3 = NormalizeZombieBehaviorDifficultySelection(string.IsNullOrWhiteSpace(_loadedZombieBehaviorDifficultyMetadata) ? ZombieBehaviorDifficulty.Value : _loadedZombieBehaviorDifficultyMetadata);
 		if (!string.Equals(ZombieBehaviorDifficulty.Value, text3, StringComparison.Ordinal))
 		{
@@ -4168,6 +4440,30 @@ public class Plugin : BaseUnityPlugin
 				return text;
 			}
 		}
+		switch (NormalizeLookupToken(value))
+		{
+		case "1":
+		case "aksound1":
+		case "aksounds1":
+		case "sound1":
+		case "声音1":
+		case "音效1":
+			return "ak_sound1";
+		case "2":
+		case "aksound2":
+		case "aksounds2":
+		case "sound2":
+		case "声音2":
+		case "音效2":
+			return "ak_sound2";
+		case "3":
+		case "aksound3":
+		case "aksounds3":
+		case "sound3":
+		case "声音3":
+		case "音效3":
+			return "ak_sound3";
+		}
 		if (string.Equals(a, "默认", StringComparison.OrdinalIgnoreCase) || string.Equals(a, "Default", StringComparison.OrdinalIgnoreCase) || string.Equals(a, "default", StringComparison.OrdinalIgnoreCase))
 		{
 			return DefaultAkSoundOption;
@@ -4307,17 +4603,12 @@ public class Plugin : BaseUnityPlugin
 
 	internal static int GetDerivedZombieWaveSpawnCountRuntime()
 	{
-		int derivedZombieWaveMinCount = GetDerivedZombieWaveMinCount();
 		int derivedZombieWaveMaxCount = GetDerivedZombieWaveMaxCount();
 		if (derivedZombieWaveMaxCount <= 0)
 		{
 			return 0;
 		}
-		if (derivedZombieWaveMinCount >= derivedZombieWaveMaxCount)
-		{
-			return derivedZombieWaveMaxCount;
-		}
-		return Random.Range(derivedZombieWaveMinCount, derivedZombieWaveMaxCount + 1);
+		return derivedZombieWaveMaxCount;
 	}
 
 	private static float GetDerivedZombieSpawnRadius()
@@ -11397,7 +11688,7 @@ private static string GetLocalizedDescriptionCore(string key, bool isChinese)
 	case "Interval Random":
 		return isChinese ? "由生成间隔自动推导出的内部浮动值，用来让刷怪节奏不那么死板；它不是单独的玩家配置项。" : "An internal jitter value derived from the spawn interval so waves do not feel too rigid. It is not a separate player-facing setting.";
 	case "Spawn Count":
-		return isChinese ? "每一波僵尸会在 0 到该值之间随机生成，并始终受僵尸最大数量限制。" : "Each wave spawns a random amount between 0 and this value, and always respects the zombie max count.";
+		return isChinese ? "每一波会尝试生成该数量的僵尸。若当前场上僵尸加上下一波会超过僵尸最大数量，则会自动把本波数量压到剩余容量。" : "Each wave attempts to spawn this many zombies. If the current live total plus the next wave would exceed the zombie max count, the wave is automatically capped to the remaining capacity.";
 	case "Count Random":
 		return isChinese ? "由每波生成数量自动推导出的内部浮动值，用来避免每一波都完全固定；它不是第二套数量配置。" : "An internal jitter value derived from the per-wave spawn count so waves are not perfectly fixed. It is not a second count setting.";
 	case "Spawn Radius":
@@ -13275,7 +13566,82 @@ private void RefreshRealModConfigUi()
 				AddUiLocalizationPair(dictionary, localizedDescription, localizedDescription2);
 			}
 		}
+		foreach (string item2 in ConfigPanelThemeValues.Concat(WeaponSelectionValues).Concat(AkSoundSelectionValues).Concat(ZombieBehaviorDifficultyValues))
+		{
+			AddUiLocalizationPair(dictionary, item2, GetLocalizedSelectableValueDisplayName(item2, isChinese));
+		}
 		return dictionary;
+	}
+
+	private static string GetLocalizedSelectableValueDisplayName(string value, bool isChinese)
+	{
+		if (string.IsNullOrWhiteSpace(value))
+		{
+			return value;
+		}
+		switch (NormalizeLookupToken(value))
+		{
+		case "dark":
+		case "black":
+		case "黑":
+		case "黑色":
+			return isChinese ? "黑色" : "Dark";
+		case "light":
+		case "white":
+		case "白":
+		case "白色":
+			return isChinese ? "白色" : "Light";
+		case "transparent":
+		case "clear":
+		case "translucent":
+		case "透":
+		case "透明":
+			return isChinese ? "透明" : "Transparent";
+		case "aksound1":
+		case "aksounds1":
+		case "sound1":
+		case "声音1":
+		case "音效1":
+			return isChinese ? "音效 1" : "Sound 1";
+		case "aksound2":
+		case "aksounds2":
+		case "sound2":
+		case "声音2":
+		case "音效2":
+			return isChinese ? "音效 2" : "Sound 2";
+		case "aksound3":
+		case "aksounds3":
+		case "sound3":
+		case "声音3":
+		case "音效3":
+			return isChinese ? "音效 3" : "Sound 3";
+		case "easy":
+		case "simple":
+		case "casual":
+		case "休闲":
+		case "简单":
+			return isChinese ? "简单" : "Easy";
+		case "standard":
+		case "normal":
+		case "默认":
+		case "标准":
+			return isChinese ? "标准" : "Standard";
+		case "hard":
+		case "困难":
+			return isChinese ? "困难" : "Hard";
+		case "insane":
+		case "brutal":
+		case "疯狂":
+		case "残酷":
+			return isChinese ? "疯狂" : "Insane";
+		case "nightmare":
+		case "hell":
+		case "噩梦":
+		case "地狱":
+			return isChinese ? "噩梦" : "Nightmare";
+		default:
+			return value;
+		}
 	}
 
 	private static void AddUiLocalizationPair(Dictionary<string, string> map, string english, string localized)
@@ -13524,9 +13890,14 @@ private void RefreshRealModConfigUi()
 		{
 			return NormalizeLocalizedText(localizedDescription);
 		}
+		string localizedSelectableValueDisplayName = GetLocalizedSelectableValueDisplayName(value, isChinese);
+		if (!string.IsNullOrWhiteSpace(localizedSelectableValueDisplayName) && !string.Equals(localizedSelectableValueDisplayName, value, StringComparison.Ordinal))
+		{
+			return NormalizeLocalizedText(localizedSelectableValueDisplayName);
+		}
 		if (string.Equals(value, "default", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "Default", StringComparison.OrdinalIgnoreCase))
 		{
-			return NormalizeLocalizedText(GetLocalizedKeyName(DefaultAkSoundOption, isChinese));
+			return NormalizeLocalizedText(GetLocalizedSelectableValueDisplayName(DefaultAkSoundOption, isChinese));
 		}
 		if (string.Equals(value, "Shoot Zombies", StringComparison.OrdinalIgnoreCase) || string.Equals(value, "ShootZombies", StringComparison.OrdinalIgnoreCase))
 		{
@@ -17987,7 +18358,7 @@ private static string GetCanonicalConfigSection(object instance)
 			field.SetValue(val, num2);
 			if (!flag && !(num2 > 0f))
 			{
-				ZombieSpawner.DestroyZombie(val2);
+				ZombieSpawner.ExpireZombie(val2);
 			}
 		}
 	}

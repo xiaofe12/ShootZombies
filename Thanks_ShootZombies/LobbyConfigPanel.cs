@@ -330,10 +330,12 @@ internal sealed class LobbyConfigPanel
 		case "dark":
 		case "black":
 		case "黑":
+		case "黑色":
 			return "dark";
 		case "light":
 		case "white":
 		case "白":
+		case "白色":
 			return "light";
 		case "transparent":
 		case "clear":

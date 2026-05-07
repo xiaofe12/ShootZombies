@@ -89,6 +89,14 @@ public static class ZombieSpawner
 
 	private const float ZombieDistanceCheckInterval = 0.75f;
 
+	private const float MinWaveSpawnSpacing = 0.25f;
+
+	private const float MaxWaveSpawnSpacing = 0.85f;
+
+	private const float MinWaveSpawnPositionSpacing = 5.5f;
+
+	private const float WaveSpawnPositionSpacingRadiusFraction = 0.42f;
+
 	private static Coroutine _spawnCoroutine;
 
 	private static HashSet<GameObject> _liveZombies = new HashSet<GameObject>();
@@ -98,6 +106,8 @@ public static class ZombieSpawner
 	private static readonly List<GameObject> _staleZombieBuffer = new List<GameObject>();
 
 	private static readonly List<Character> _alivePlayersBuffer = new List<Character>();
+
+	private static readonly List<Vector3> _waveSpawnPositions = new List<Vector3>();
 
 	private static GameObject _cachedLocalZombiePrefab;
 
@@ -156,7 +166,7 @@ public static class ZombieSpawner
 			yield break;
 		}
 		int nextSpawnCount = GetNextSpawnCount();
-		SpawnZombiesAroundPlayers(nextSpawnCount);
+		yield return SpawnZombiesAroundPlayers(nextSpawnCount);
 		while (Plugin.IsZombieSpawnFeatureEnabledRuntime())
 		{
 			float nextSpawnDelay = GetNextSpawnDelay();
@@ -169,48 +179,76 @@ public static class ZombieSpawner
 			if (Plugin.HasGameplayAuthority())
 			{
 				int nextSpawnCount2 = GetNextSpawnCount();
-				SpawnZombiesAroundPlayers(nextSpawnCount2);
+				yield return SpawnZombiesAroundPlayers(nextSpawnCount2);
 			}
 		}
 	}
 
-	private static void SpawnZombiesAroundPlayers(int count)
+	private static IEnumerator SpawnZombiesAroundPlayers(int count)
 	{
 		if (!Plugin.HasGameplayAuthority() || !IsGameplaySpawnScene())
 		{
-			return;
+			yield break;
 		}
+		_waveSpawnPositions.Clear();
+		int spawned = 0;
+		for (int i = 0; i < count; i++)
+		{
+			if (!Plugin.IsZombieSpawnFeatureEnabledRuntime() || !Plugin.HasGameplayAuthority())
+			{
+				yield break;
+			}
+			if (!IsGameplaySpawnScene())
+			{
+				DestroyAllZombies();
+				yield break;
+			}
+			int currentZombieCount = GetCurrentZombieCount();
+			int maxZombieCount = Mathf.Max(Plugin.MaxZombies.Value, 0);
+			if (GetSpawnCountForRemainingCapacity(1, currentZombieCount, maxZombieCount) <= 0 || CollectAlivePlayers(_alivePlayersBuffer) == 0)
+			{
+				yield break;
+			}
+			if (TrySpawnOneZombieAroundPlayers())
+			{
+				spawned++;
+			}
+			if (i + 1 < count)
+			{
+				yield return (object)new WaitForSeconds(GetNextWaveSpawnSpacing(spawned));
+			}
+		}
+		_waveSpawnPositions.Clear();
+	}
+
+	private static bool TrySpawnOneZombieAroundPlayers()
+	{
 		try
 		{
-			int currentZombieCount = GetCurrentZombieCount();
-			int value = Plugin.MaxZombies.Value;
-			if (currentZombieCount >= value || CollectAlivePlayers(_alivePlayersBuffer) == 0)
+			if (!TryGetSpawnPosition(out var position, out var targetPlayer))
 			{
-				return;
+				return false;
 			}
-			int num = Mathf.Min(count, value - currentZombieCount);
-			for (int i = 0; i < num; i++)
+			Quaternion rotation = GetSpawnRotation(position, targetPlayer);
+			GameObject val = TryCreateZombieInstance(position, rotation);
+			if ((Object)val == (Object)null)
 			{
-				if (TryGetSpawnPosition(out var position, out var targetPlayer))
-				{
-					Quaternion rotation = GetSpawnRotation(position, targetPlayer);
-					GameObject val = TryCreateZombieInstance(position, rotation);
-					if ((Object)val != (Object)null)
-					{
-						_liveZombies.Add(val);
-						float value2 = Plugin.ZombieMaxLifetime.Value;
-						_zombieTimers.Add(new ZombieTimer
-						{
-							zombie = val,
-							deathTime = Time.time + value2
-						});
-						ApplyZombieProperties(val);
-					}
-				}
+				return false;
 			}
+			_liveZombies.Add(val);
+			_waveSpawnPositions.Add(position);
+			float value = Plugin.ZombieMaxLifetime.Value;
+			_zombieTimers.Add(new ZombieTimer
+			{
+				zombie = val,
+				deathTime = Time.time + value
+			});
+			ApplyZombieProperties(val);
+			return true;
 		}
 		catch (Exception)
 		{
+			return false;
 		}
 	}
 
@@ -242,7 +280,7 @@ public static class ZombieSpawner
 				{
 					expired = true;
 					_zombieTimers.RemoveAt(i);
-					DestroyZombie(zombie);
+					ExpireZombie(zombie);
 				}
 				else
 				{
@@ -252,6 +290,17 @@ public static class ZombieSpawner
 			}
 		}
 		return false;
+	}
+
+	public static void ExpireZombie(GameObject zombie)
+	{
+		if ((Object)zombie == (Object)null)
+		{
+			return;
+		}
+		_liveZombies.Remove(zombie);
+		_zombieTimers.RemoveAll((ZombieTimer t) => (Object)t.zombie == (Object)zombie);
+		DestroyZombie(zombie);
 	}
 
 	public static void RefreshLiveZombieProperties()
@@ -469,6 +518,7 @@ public static class ZombieSpawner
 		_zombieTimers.Clear();
 		_staleZombieBuffer.Clear();
 		_alivePlayersBuffer.Clear();
+		_waveSpawnPositions.Clear();
 		_nextZombieLifetimeCheckTime = 0f;
 		_nextZombieDistanceCheckTime = 0f;
 	}
@@ -516,7 +566,7 @@ public static class ZombieSpawner
 			else if (flag && time >= zombieTimer.deathTime)
 			{
 				_zombieTimers.RemoveAt(num2);
-				DestroyZombie(zombieTimer.zombie);
+				ExpireZombie(zombieTimer.zombie);
 			}
 			else if (flag2 && GetClosestAlivePlayerDistanceSqr(zombieTimer.zombie.transform.position, _alivePlayersBuffer) > num)
 			{
@@ -609,9 +659,34 @@ public static class ZombieSpawner
 		return Mathf.Clamp(num3 * 0.75f, 3f, 30f);
 	}
 
+	private static float GetNextWaveSpawnSpacing(int spawnedInWave)
+	{
+		float min = MinWaveSpawnSpacing;
+		float max = MaxWaveSpawnSpacing;
+		if (spawnedInWave <= 0)
+		{
+			max = Mathf.Min(max, 0.45f);
+		}
+		return Random.Range(min, max);
+	}
+
 	private static int GetNextSpawnCount()
 	{
-		return Mathf.Max(Plugin.GetDerivedZombieWaveSpawnCountRuntime(), 0);
+		return GetSpawnCountForRemainingCapacity(Plugin.GetDerivedZombieWaveSpawnCountRuntime(), GetCurrentZombieCount(), Mathf.Max(Plugin.MaxZombies.Value, 0));
+	}
+
+	private static int GetSpawnCountForRemainingCapacity(int requestedCount, int currentZombieCount, int maxZombieCount)
+	{
+		if (requestedCount <= 0 || maxZombieCount <= 0)
+		{
+			return 0;
+		}
+		int remainingCapacity = Mathf.Max(maxZombieCount - Mathf.Max(currentZombieCount, 0), 0);
+		if (remainingCapacity <= 0)
+		{
+			return 0;
+		}
+		return Mathf.Min(requestedCount, remainingCapacity);
 	}
 
 	private static bool TryGetSpawnPosition(out Vector3 position, out Character targetPlayer)
@@ -626,11 +701,13 @@ public static class ZombieSpawner
 		}
 		float num = Mathf.Max(Plugin.GetDerivedZombieSpawnRadiusRuntime(), 8f);
 		float num2 = Mathf.Max(Mathf.Min(num * MinSpawnRadiusFraction, num - 1f), Mathf.Min(MinSpawnRadiusFloor, num * MinSpawnRadiusFloorFraction));
-		int num3 = Mathf.CeilToInt((float)SpawnPositionAttempts * FrontSpawnPreferenceFraction);
+		float num3 = Mathf.Clamp(num * WaveSpawnPositionSpacingRadiusFraction, MinWaveSpawnPositionSpacing, Mathf.Max(num2, MinWaveSpawnPositionSpacing));
+		int num4 = Mathf.CeilToInt((float)SpawnPositionAttempts * FrontSpawnPreferenceFraction);
+		int num5 = Random.Range(0, alivePlayers.Count);
 		for (int i = 0; i < SpawnPositionAttempts; i++)
 		{
-			Character val = alivePlayers[Random.Range(0, alivePlayers.Count)];
-			if (!((Object)val == (Object)null) && TryBuildSpawnCandidate(val, alivePlayers, num2, num, i < num3, out var position2))
+			Character val = alivePlayers[(num5 + i + Random.Range(0, alivePlayers.Count)) % alivePlayers.Count];
+			if (!((Object)val == (Object)null) && TryBuildSpawnCandidate(val, alivePlayers, num2, num, num3, i < num4, out var position2))
 			{
 				position = position2;
 				targetPlayer = val;
@@ -682,7 +759,7 @@ public static class ZombieSpawner
 		ClearZombies();
 	}
 
-	private static bool TryBuildSpawnCandidate(Character targetPlayer, List<Character> players, float minRadius, float maxRadius, bool preferFront, out Vector3 position)
+	private static bool TryBuildSpawnCandidate(Character targetPlayer, List<Character> players, float minRadius, float maxRadius, float wavePositionSpacing, bool preferFront, out Vector3 position)
 	{
 		position = Vector3.zero;
 		if ((Object)targetPlayer == (Object)null)
@@ -699,7 +776,7 @@ public static class ZombieSpawner
 			{
 				continue;
 			}
-			if (IsSpawnPositionValid(position2, players, minRadius * 0.8f) && IsSpawnPositionStealthy(position2, players, targetPlayer, preferFront))
+			if (IsSpawnPositionValid(position2, players, minRadius * 0.8f, wavePositionSpacing) && IsSpawnPositionStealthy(position2, players, targetPlayer, preferFront))
 			{
 				position = position2;
 				return true;
@@ -708,7 +785,7 @@ public static class ZombieSpawner
 		return false;
 	}
 
-	private static bool IsSpawnPositionValid(Vector3 position, List<Character> players, float minDistance)
+	private static bool IsSpawnPositionValid(Vector3 position, List<Character> players, float minDistance, float wavePositionSpacing)
 	{
 		if (position == Vector3.zero)
 		{
@@ -729,6 +806,15 @@ public static class ZombieSpawner
 		foreach (GameObject liveZombie in _liveZombies)
 		{
 			if ((Object)liveZombie != (Object)null && Vector3.Distance(position, liveZombie.transform.position) < 3f)
+			{
+				return false;
+			}
+		}
+		foreach (Vector3 waveSpawnPosition in _waveSpawnPositions)
+		{
+			Vector3 val = waveSpawnPosition;
+			val.y = position.y;
+			if (Vector3.Distance(position, val) < wavePositionSpacing)
 			{
 				return false;
 			}
