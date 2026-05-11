@@ -56,6 +56,12 @@ public static class InventoryItemUiPatch
 			return;
 		}
 		int instanceID = ((Object)__instance).GetInstanceID();
+		if (!Plugin.IsWeaponFeatureEnabled())
+		{
+			LastStateByUiId.Remove(instanceID);
+			AkUiPatchHelpers.ClearInventoryUiCache(__instance);
+			return;
+		}
 		if (slot == null || slot.IsEmpty())
 		{
 			LastStateByUiId.Remove(instanceID);

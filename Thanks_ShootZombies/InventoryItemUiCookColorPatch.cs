@@ -15,6 +15,10 @@ public static class InventoryItemUiCookColorPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			AkUiPatchHelpers.ApplyAkToInventoryUi(__instance);
 		}
 		catch

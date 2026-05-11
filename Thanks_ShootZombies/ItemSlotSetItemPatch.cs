@@ -16,6 +16,10 @@ public static class ItemSlotSetItemPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			Item val = null;
 			if (__args != null && __args.Length != 0)
 			{

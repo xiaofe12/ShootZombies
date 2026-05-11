@@ -38,6 +38,10 @@ public class BlowgunChargeSoundPatch
 	{
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return true;
+			}
 			Character localCharacter = Character.localCharacter;
 			if ((Object)localCharacter == (Object)null)
 			{

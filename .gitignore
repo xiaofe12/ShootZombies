@@ -12,3 +12,8 @@ temp_ilspy/
 *.vsidx
 *.cache
 *.pdb
+*.rsp
+.tmp*
+_tmp*
+*ildasm*.txt
+*loader_errors*.txt

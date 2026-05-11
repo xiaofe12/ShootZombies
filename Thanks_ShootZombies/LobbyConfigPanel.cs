@@ -136,6 +136,8 @@ internal sealed class LobbyConfigPanel
 
 	private bool _isDirty = true;
 
+	private bool _hasDataModel;
+
 	private string _selectedSourceId = string.Empty;
 
 	private string _selectedSectionKey = string.Empty;
@@ -597,6 +599,12 @@ internal sealed class LobbyConfigPanel
 			return;
 		}
 		SyncThemeFromConfig();
+		if (!_isOpen && _rootObject == null)
+		{
+			BuildUi();
+			RefreshDataModel();
+			_isDirty = false;
+		}
 		if (_pendingKeyCaptureEntry != null)
 		{
 			HandleKeyCapture();
@@ -634,10 +642,18 @@ internal sealed class LobbyConfigPanel
 		Cursor.visible = true;
 		if (_isDirty || Time.unscaledTime >= _nextExternalRefreshTime)
 		{
-			RefreshDataModel();
-			RefreshUi();
+			if (_isDirty || !_hasDataModel)
+			{
+				RefreshDataModel();
+				RefreshUi();
+				_isDirty = false;
+			}
+			else
+			{
+				RefreshVisibleBindings();
+				UpdatePanelHeaders();
+			}
 			_nextExternalRefreshTime = Time.unscaledTime + 0.5f;
-			_isDirty = false;
 		}
 	}
 
@@ -668,6 +684,9 @@ internal sealed class LobbyConfigPanel
 			}
 		}
 		_immediateTextureCache.Clear();
+		_sources.Clear();
+		_visibleBindings.Clear();
+		_hasDataModel = false;
 	}
 
 	private void Open()
@@ -684,16 +703,23 @@ internal sealed class LobbyConfigPanel
 			_canvas.enabled = false;
 		}
 		ClampPanelToScreen();
-		Canvas.ForceUpdateCanvases();
-		RefreshDataModel();
-		RefreshUi();
+		if (!_hasDataModel || _sources.Count == 0 || _isDirty)
+		{
+			RefreshDataModel();
+			RefreshUi();
+			_isDirty = false;
+		}
+		else
+		{
+			RefreshVisibleBindings();
+			UpdatePanelHeaders();
+		}
 		CaptureCursorState();
 		EnsureWindowRectInitialized(forceReset: _windowRect.width <= 1f || _windowRect.height <= 1f);
 		_cursorOwner = this;
 		EventSystem.current?.SetSelectedGameObject(null);
 		_isOpen = true;
 		_pendingRenderDiagnostic = true;
-		_isDirty = false;
 		_nextExternalRefreshTime = Time.unscaledTime + 0.5f;
 		if (Plugin.ShouldEmitVerboseInfoLogsRuntime())
 		{
@@ -837,8 +863,10 @@ internal sealed class LobbyConfigPanel
 		{
 			_selectedSourceId = string.Empty;
 			_selectedSectionKey = string.Empty;
+			_hasDataModel = false;
 			return;
 		}
+		_hasDataModel = true;
 		if (!_sources.Any((ConfigSource source) => string.Equals(source.Id, _selectedSourceId, StringComparison.Ordinal)))
 		{
 			_selectedSourceId = _sources[0].Id;
@@ -1842,7 +1870,6 @@ internal sealed class LobbyConfigPanel
 		{
 			return;
 		}
-		Canvas.ForceUpdateCanvases();
 		LayoutRebuilder.ForceRebuildLayoutImmediate(_entryListRect);
 		ScrollRect componentInParent = _entryListRect.GetComponentInParent<ScrollRect>();
 		if ((UnityEngine.Object)componentInParent != (UnityEngine.Object)null)
@@ -1853,7 +1880,6 @@ internal sealed class LobbyConfigPanel
 				LayoutRebuilder.ForceRebuildLayoutImmediate(component);
 			}
 		}
-		Canvas.ForceUpdateCanvases();
 	}
 
 	private ConfigSource GetSelectedSource()

@@ -16,6 +16,10 @@ public static class BackpackWheelPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			AkUiPatchHelpers.ApplyAkToBackpackWheel(__instance);
 			BackpackWheelSlice[] componentsInChildren = ((Component)__instance).GetComponentsInChildren<BackpackWheelSlice>(true);
 			for (int i = 0; i < componentsInChildren.Length; i++)

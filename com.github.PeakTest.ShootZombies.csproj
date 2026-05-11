@@ -128,38 +128,7 @@
     </Reference>
   </ItemGroup>
   <ItemGroup>
-    <Compile Include="Thanks_ShootZombies\AkLightweightAssetLoader.cs" />
-    <Compile Include="Thanks_ShootZombies\AkHeldLegacyVisualMarker.cs" />
-    <Compile Include="Thanks_ShootZombies\AkInPlaceMarker.cs" />
-    <Compile Include="Thanks_ShootZombies\AkLocalVisualMarker.cs" />
-    <Compile Include="Thanks_ShootZombies\AkMuzzleMarker.cs" />
-    <Compile Include="Thanks_ShootZombies\AkSimpleVisualMarker.cs" />
-    <Compile Include="Thanks_ShootZombies\AkUiPatchHelpers.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelCookColorPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelSetItemIconPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelSharedInitPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelSliceCookColorPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelSlicePatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BackpackWheelStashSlicePatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BlowgunChargeSoundPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BlowgunInfiniteUsePatch.cs" />
-    <Compile Include="Thanks_ShootZombies\BlowgunWreckPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\DartImpactPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\DisableZombieSleepPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\GlobalAliases.cs" />
-    <Compile Include="Thanks_ShootZombies\HideUseItemProgressPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\InventoryItemUiCookColorPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\InventoryItemUiNamePatch.cs" />
-    <Compile Include="Thanks_ShootZombies\InventoryItemUiPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\ItemPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\ItemSlotSetItemPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\ItemUIDataPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\LobbyConfigPanel.cs" />
-    <Compile Include="Thanks_ShootZombies\Plugin.cs" />
-    <Compile Include="Thanks_ShootZombies\SuppressOriginalBlowgunFirePatch.cs" />
-    <Compile Include="Thanks_ShootZombies\ZombieDeathPatch.cs" />
-    <Compile Include="Thanks_ShootZombies\ZombieSpawner.cs" />
+    <Compile Include="Thanks_ShootZombies\*.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

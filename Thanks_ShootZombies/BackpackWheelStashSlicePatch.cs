@@ -16,6 +16,10 @@ public static class BackpackWheelStashSlicePatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			Item val = AkUiPatchHelpers.ResolveItemFromSlice(__instance);
 			if ((Object)val == (Object)null)
 			{

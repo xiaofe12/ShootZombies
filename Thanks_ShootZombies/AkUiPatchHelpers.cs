@@ -49,7 +49,7 @@ internal static class AkUiPatchHelpers
 
 	internal static void ApplyAkIcon(RawImage image, Item item)
 	{
-		if (!((Object)image == (Object)null) && ItemPatch.IsBlowgunLike(item))
+		if (Plugin.IsWeaponFeatureEnabled() && !((Object)image == (Object)null) && ItemPatch.IsBlowgunLike(item))
 		{
 			ApplyAkIconForce(image);
 		}
@@ -89,7 +89,7 @@ internal static class AkUiPatchHelpers
 
 	internal static void EnsureAkDisplayAndVisual(Item item)
 	{
-		if (!((Object)item == (Object)null) && ItemPatch.IsBlowgunLike(item))
+		if (Plugin.IsWeaponFeatureEnabled() && !((Object)item == (Object)null) && ItemPatch.IsBlowgunLike(item))
 		{
 			ItemPatch.ApplyAkDisplay(item);
 		}
@@ -104,6 +104,10 @@ internal static class AkUiPatchHelpers
 		TrackInventoryUi(ui);
 		Item val = (((Object)knownItem != (Object)null) ? knownItem : ResolveItemFromInventoryUi(ui));
 		int instanceID = ((Object)ui).GetInstanceID();
+		if (!Plugin.IsWeaponFeatureEnabled())
+		{
+			return;
+		}
 		int itemSourceKey = GetItemSourceKey(val);
 		if (itemSourceKey != 0 && InventoryUiSourceKeyCache.TryGetValue(instanceID, out var value) && value == itemSourceKey && IsInventoryUiAlreadyShowingAk(ui))
 		{
@@ -204,6 +208,10 @@ internal static class AkUiPatchHelpers
 			TrackSlice(slice);
 			Item val = (((Object)knownItem != (Object)null) ? knownItem : ResolveItemFromSlice(slice));
 			int instanceID = ((Object)slice).GetInstanceID();
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			int itemSourceKey = GetItemSourceKey(val);
 			if (itemSourceKey != 0 && SliceSourceKeyCache.TryGetValue(instanceID, out var value) && value == itemSourceKey && IsSliceAlreadyShowingAk(slice))
 			{
@@ -236,6 +244,10 @@ internal static class AkUiPatchHelpers
 			val = localCharacter?.data?.currentItem;
 		}
 		Character localCharacter2 = Character.localCharacter;
+		if (!Plugin.IsWeaponFeatureEnabled())
+		{
+			return;
+		}
 		if (!((Object)val == (Object)null) && ItemPatch.IsBlowgunLike(val) && ItemPatch.IsLocallyHeldByPlayer(val, localCharacter2))
 		{
 			ItemPatch.ApplyAkDisplayIfNeeded(val);

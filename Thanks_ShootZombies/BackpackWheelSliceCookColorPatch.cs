@@ -15,6 +15,10 @@ public static class BackpackWheelSliceCookColorPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			Item val = (((Object)item != (Object)null) ? item : AkUiPatchHelpers.ResolveItemFromSlice(__instance));
 			if (!((Object)val == (Object)null) && ItemPatch.IsBlowgunLike(val))
 			{
@@ -26,4 +30,3 @@ public static class BackpackWheelSliceCookColorPatch
 		}
 	}
 }
-

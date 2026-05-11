@@ -35,6 +35,8 @@ public static class ZombieSpawner
 		public GameObject zombie;
 
 		public float deathTime;
+
+		public float health01;
 	}
 
 	private const float MinSpawnRadiusFraction = 0.45f;
@@ -241,7 +243,8 @@ public static class ZombieSpawner
 			_zombieTimers.Add(new ZombieTimer
 			{
 				zombie = val,
-				deathTime = Time.time + value
+				deathTime = Time.time + value,
+				health01 = 1f
 			});
 			ApplyZombieProperties(val);
 			return true;
@@ -276,7 +279,8 @@ public static class ZombieSpawner
 			if (!((Object)value.zombie != (Object)zombie))
 			{
 				value.deathTime -= seconds;
-				if (value.deathTime <= Time.time)
+				value.health01 = Mathf.Clamp01(value.health01 - seconds / Mathf.Max(Plugin.ZombieMaxLifetime.Value, 1f));
+				if (value.health01 <= 0f || value.deathTime <= Time.time)
 				{
 					expired = true;
 					_zombieTimers.RemoveAt(i);
@@ -286,6 +290,25 @@ public static class ZombieSpawner
 				{
 					_zombieTimers[i] = value;
 				}
+				return true;
+			}
+		}
+		return false;
+	}
+
+	public static bool TryGetZombieHealth01(GameObject zombie, out float health01)
+	{
+		health01 = 1f;
+		if ((Object)zombie == (Object)null)
+		{
+			return false;
+		}
+		for (int i = 0; i < _zombieTimers.Count; i++)
+		{
+			ZombieTimer zombieTimer = _zombieTimers[i];
+			if ((Object)zombieTimer.zombie == (Object)zombie)
+			{
+				health01 = Mathf.Clamp01(zombieTimer.health01);
 				return true;
 			}
 		}
@@ -315,6 +338,59 @@ public static class ZombieSpawner
 			if (!((Object)liveZombie == (Object)null))
 			{
 				ApplyZombieProperties(liveZombie);
+			}
+		}
+	}
+
+	public static void RebuildLiveZombieRegistryFromScene()
+	{
+		if (!Plugin.HasGameplayAuthority() || !IsGameplaySpawnScene())
+		{
+			return;
+		}
+		_liveZombies.Clear();
+		_zombieTimers.Clear();
+		_staleZombieBuffer.Clear();
+		_waveSpawnPositions.Clear();
+		try
+		{
+			MushroomZombie[] zombies = Resources.FindObjectsOfTypeAll<MushroomZombie>();
+			float lifetime = Mathf.Max((Plugin.ZombieMaxLifetime != null) ? Plugin.ZombieMaxLifetime.Value : 120f, 1f);
+			float deathTime = Time.time + lifetime;
+			foreach (MushroomZombie zombie in zombies)
+			{
+				if ((Object)zombie == (Object)null)
+				{
+					continue;
+				}
+				GameObject zombieObject = ((Component)zombie).gameObject;
+				if ((Object)zombieObject == (Object)null || !zombieObject.scene.IsValid() || !zombieObject.scene.isLoaded)
+				{
+					continue;
+				}
+				Character character = zombieObject.GetComponent<Character>() ?? zombieObject.GetComponentInParent<Character>() ?? zombieObject.GetComponentInChildren<Character>(true);
+				if ((Object)character != (Object)null && !character.isZombie && !character.isBot)
+				{
+					continue;
+				}
+				if (!_liveZombies.Add(zombieObject))
+				{
+					continue;
+				}
+				_zombieTimers.Add(new ZombieTimer
+				{
+					zombie = zombieObject,
+					deathTime = deathTime,
+					health01 = 1f
+				});
+				ApplyZombieProperties(zombieObject);
+			}
+		}
+		catch (Exception ex)
+		{
+			if (Plugin.Log != null)
+			{
+				Plugin.Log.LogWarning((object)("[ShootZombies] RebuildLiveZombieRegistryFromScene failed: " + ex.Message));
 			}
 		}
 	}

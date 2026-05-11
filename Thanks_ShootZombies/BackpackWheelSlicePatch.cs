@@ -16,6 +16,10 @@ public static class BackpackWheelSlicePatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			ItemSlot val = slot.Item1.GetData().itemSlots[slot.Item2];
 			if (val != null && !val.IsEmpty() && ItemPatch.IsBlowgunLike(val.prefab))
 			{

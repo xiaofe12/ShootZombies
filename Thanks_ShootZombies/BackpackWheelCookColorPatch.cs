@@ -15,6 +15,10 @@ public static class BackpackWheelCookColorPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			object obj;
 			if (!((Object)item != (Object)null))
 			{
@@ -44,4 +48,3 @@ public static class BackpackWheelCookColorPatch
 		}
 	}
 }
-

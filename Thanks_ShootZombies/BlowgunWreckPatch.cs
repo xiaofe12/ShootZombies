@@ -10,6 +10,10 @@ public class BlowgunWreckPatch
 	{
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return true;
+			}
 			Item component = ((Component)__instance).GetComponent<Item>();
 			if ((Object)component != (Object)null)
 			{

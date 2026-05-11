@@ -16,6 +16,10 @@ public static class InventoryItemUiNamePatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			AkUiPatchHelpers.ApplyAkToInventoryUi(__instance);
 		}
 		catch (Exception ex)
@@ -24,4 +28,3 @@ public static class InventoryItemUiNamePatch
 		}
 	}
 }
-

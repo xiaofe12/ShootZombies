@@ -16,6 +16,10 @@ public static class BackpackWheelSharedInitPatch
 		}
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			AkUiPatchHelpers.ApplyAkToSliceImage(__instance);
 		}
 		catch (Exception ex)
@@ -24,4 +28,3 @@ public static class BackpackWheelSharedInitPatch
 		}
 	}
 }
-

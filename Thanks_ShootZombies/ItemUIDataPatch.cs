@@ -62,6 +62,10 @@ public static class ItemUIDataPatch
 	{
 		try
 		{
+			if (!Plugin.IsWeaponFeatureEnabled())
+			{
+				return;
+			}
 			Texture2D akIconTexture = Plugin.GetAkIconTexture();
 			if (!((Object)akIconTexture == (Object)null) && ShouldUseAkIcon(__instance.GetType().GetField("itemName", BindingFlags.Instance | BindingFlags.Public)?.GetValue(__instance) as string))
 			{
@@ -80,6 +84,12 @@ public static class ItemUIDataPatch
 
 	public static void ForceRefreshVisibleUi()
 	{
+		if (!Plugin.IsWeaponFeatureEnabled())
+		{
+			ResetVisibleUiTrackingFallback();
+			InventoryItemUiPatch.ClearCaches();
+			return;
+		}
 		if (Plugin.IsRuntimeVisualRefreshBlocked())
 		{
 			_pendingVisibleUiRefresh = true;
