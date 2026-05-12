@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
 using Zorro.Core;
@@ -88,8 +89,12 @@ public partial class Plugin
 		ItemSlot keptSlot = null;
 		bool changed = false;
 		bool currentItemIsWeapon = IsProtectedWeaponItem(currentItem);
+		if (player.itemSlots.Length > 0 && IsProtectedWeaponSlot(player.itemSlots[0]))
+		{
+			keptSlot = player.itemSlots[0];
+		}
 		Optionable<byte> selectedSlot = GetSelectedSlot(c);
-		if (selectedSlot.IsSome)
+		if (keptSlot == null && selectedSlot.IsSome)
 		{
 			ItemSlot selectedItemSlot = player.GetItemSlot(selectedSlot.Value);
 			if (IsProtectedWeaponSlot(selectedItemSlot))
@@ -132,11 +137,120 @@ public partial class Plugin
 			}
 		}
 
+		if (TryMoveWeaponToPreferredInventorySlot(player, ref keptSlot))
+		{
+			changed = true;
+		}
 		if (changed)
 		{
 			TrySyncInventoryRpc(c, player, "single-weapon");
 		}
 		return keptSlot != null || currentItemIsWeapon;
+	}
+
+	private static bool TryMoveWeaponToPreferredInventorySlot(Player player, ref ItemSlot keptSlot)
+	{
+		if ((Object)player == (Object)null || player.itemSlots == null || player.itemSlots.Length == 0 || keptSlot == null)
+		{
+			return false;
+		}
+		ItemSlot preferredSlot = player.itemSlots[0];
+		if (preferredSlot == null || preferredSlot == keptSlot || !IsProtectedWeaponSlot(keptSlot))
+		{
+			return false;
+		}
+		if (IsProtectedWeaponSlot(preferredSlot))
+		{
+			keptSlot.EmptyOut();
+			keptSlot = preferredSlot;
+			return true;
+		}
+		Item weaponItem = keptSlot.prefab;
+		ItemInstanceData weaponData = GetSlotDataOrFallback(keptSlot, 999);
+		if ((Object)weaponItem == (Object)null)
+		{
+			return false;
+		}
+		bool preferredHadItem = !preferredSlot.IsEmpty();
+		Item displacedItem = preferredHadItem ? preferredSlot.prefab : null;
+		ItemInstanceData displacedData = preferredHadItem ? GetSlotDataOrFallback(preferredSlot, 1) : null;
+		ItemSlot displacedTarget = null;
+		if (preferredHadItem)
+		{
+			displacedTarget = IsInventorySlot(player, keptSlot) ? keptSlot : FindEmptyInventorySlot(player, startIndex: 1);
+			if (displacedTarget == null)
+			{
+				return false;
+			}
+		}
+		preferredSlot.SetItem(weaponItem, weaponData);
+		if (preferredHadItem)
+		{
+			displacedTarget.SetItem(displacedItem, displacedData);
+		}
+		else
+		{
+			keptSlot.EmptyOut();
+		}
+		keptSlot = preferredSlot;
+		TryProtectWeaponItemRuntime(weaponItem);
+		return true;
+	}
+
+	private static bool IsInventorySlot(Player player, ItemSlot slot)
+	{
+		if ((Object)player == (Object)null || player.itemSlots == null || slot == null)
+		{
+			return false;
+		}
+		for (int i = 0; i < player.itemSlots.Length; i++)
+		{
+			if (player.itemSlots[i] == slot)
+			{
+				return true;
+			}
+		}
+		return false;
+	}
+
+	private static ItemSlot FindEmptyInventorySlot(Player player, int startIndex)
+	{
+		if ((Object)player == (Object)null || player.itemSlots == null)
+		{
+			return null;
+		}
+		for (int i = Mathf.Max(startIndex, 0); i < player.itemSlots.Length; i++)
+		{
+			if (player.itemSlots[i] != null && player.itemSlots[i].IsEmpty())
+			{
+				return player.itemSlots[i];
+			}
+		}
+		return null;
+	}
+
+	private static ItemInstanceData GetSlotDataOrFallback(ItemSlot slot, int fallbackUses)
+	{
+		if (slot != null)
+		{
+			try
+			{
+				object value = ((object)slot).GetType().GetProperty("data", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(slot);
+				if (value is ItemInstanceData data)
+				{
+					return data;
+				}
+				FieldInfo field = ((object)slot).GetType().GetField("data", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+				if (field != null && field.GetValue(slot) is ItemInstanceData fieldData)
+				{
+					return fieldData;
+				}
+			}
+			catch
+			{
+			}
+		}
+		return CreateItemInstanceData(fallbackUses);
 	}
 
 	internal static bool TryEquipExistingWeaponSlot(Character c)
