@@ -2008,7 +2008,6 @@ public partial class Plugin
 		_lastWeaponGrantTimeByActor.Clear();
 		_lastFirstAidGrantTimeByActor.Clear();
 		_weaponMissingSinceByActor.Clear();
-		_firstAidMissingSinceByActor.Clear();
 		_recentWeaponDropTimeByActor.Clear();
 	}
 
@@ -2038,7 +2037,7 @@ public partial class Plugin
 		{
 			ProcessPendingRemoteGrantRequests(force: true);
 			Character localCharacter = Character.localCharacter ?? _localCharacter;
-			if ((Object)localCharacter != (Object)null && !localCharacter.isBot && !localCharacter.isZombie && IsAlive(localCharacter))
+			if ((Object)localCharacter != (Object)null && IsLoadoutGrantEligible(localCharacter))
 			{
 				int characterGrantTrackingId = GetCharacterGrantTrackingId(localCharacter);
 				if (characterGrantTrackingId != int.MinValue)

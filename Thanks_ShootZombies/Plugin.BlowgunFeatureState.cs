@@ -19,7 +19,9 @@ public partial class Plugin
 	private void RestoreVanillaBlowgunFeatureState()
 	{
 		BlowgunInfiniteUsePatch.RestoreVanillaSingleUseOnAllBlowguns();
+		RestoreWeaponItemInteractionRestrictionsOnAllBlowguns();
 		HideUseItemProgressPatch.RestoreVanillaUseProgressOnAllUi();
+		ItemUIDataPatch.ForceRefreshVisibleUi();
 		_lastChargeSyncItemId = int.MinValue;
 		_hasWeapon = false;
 		_restoredVanillaBlowgunFunctionalityForDisabledFeature = true;

@@ -154,6 +154,17 @@ public static class DisableZombieSleepPatch
 		PostBiteRecoveryUntilByZombieViewId.Clear();
 	}
 
+	[HarmonyPatch(typeof(MushroomZombie), "Start")]
+	[HarmonyPostfix]
+	private static void MushroomZombieStartPostfix(MushroomZombie __instance)
+	{
+		if ((Object)__instance == (Object)null)
+		{
+			return;
+		}
+		ZombieSpawner.InitializeSpawnedZombieRuntime(((Component)__instance).gameObject);
+	}
+
 	[HarmonyPatch(typeof(MushroomZombie), "TryLookForTarget")]
 	[HarmonyPrefix]
 	private static bool TryLookForTargetPrefix(MushroomZombie __instance)
@@ -177,7 +188,7 @@ public static class DisableZombieSleepPatch
 		float num = float.MaxValue;
 		foreach (Character allCharacter in Character.AllCharacters)
 		{
-			if ((Object)allCharacter == (Object)null || (Object)allCharacter == (Object)component || allCharacter.isBot || allCharacter.data.dead || allCharacter.data.fullyPassedOut)
+			if ((Object)allCharacter == (Object)null || (Object)allCharacter == (Object)component || allCharacter.isBot || allCharacter.isZombie || allCharacter.data == null || allCharacter.data.dead || allCharacter.data.fullyPassedOut)
 			{
 				continue;
 			}

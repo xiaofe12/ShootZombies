@@ -99,6 +99,8 @@ public static class ZombieSpawner
 
 	private const float WaveSpawnPositionSpacingRadiusFraction = 0.42f;
 
+	private const float SpawnReadinessCheckInterval = 0.25f;
+
 	private static Coroutine _spawnCoroutine;
 
 	private static HashSet<GameObject> _liveZombies = new HashSet<GameObject>();
@@ -163,6 +165,7 @@ public static class ZombieSpawner
 	private static IEnumerator ZombieSpawnCoroutine()
 	{
 		yield return (object)new WaitForSeconds(GetNextSpawnDelay(firstWave: true));
+		yield return WaitForSpawnReadiness();
 		if (!IsGameplaySpawnScene())
 		{
 			yield break;
@@ -173,6 +176,12 @@ public static class ZombieSpawner
 		{
 			float nextSpawnDelay = GetNextSpawnDelay();
 			yield return (object)new WaitForSeconds(nextSpawnDelay);
+			if (!IsGameplaySpawnScene())
+			{
+				DestroyAllZombies();
+				continue;
+			}
+			yield return WaitForSpawnReadiness();
 			if (!IsGameplaySpawnScene())
 			{
 				DestroyAllZombies();
@@ -239,6 +248,7 @@ public static class ZombieSpawner
 			}
 			_liveZombies.Add(val);
 			_waveSpawnPositions.Add(position);
+			InitializeSpawnedZombieRuntime(val);
 			float value = Plugin.ZombieMaxLifetime.Value;
 			_zombieTimers.Add(new ZombieTimer
 			{
@@ -258,6 +268,22 @@ public static class ZombieSpawner
 	public static bool ContainsZombie(GameObject zombie)
 	{
 		return _liveZombies.Contains(zombie);
+	}
+
+	private static IEnumerator WaitForSpawnReadiness()
+	{
+		while (Plugin.IsZombieSpawnFeatureEnabledRuntime() && IsGameplaySpawnScene())
+		{
+			if (!Plugin.HasGameplayAuthority())
+			{
+				yield break;
+			}
+			if (CollectAlivePlayers(_alivePlayersBuffer) > 0)
+			{
+				yield break;
+			}
+			yield return (object)new WaitForSeconds(SpawnReadinessCheckInterval);
+		}
 	}
 
 	public static void RemoveZombie(GameObject zombie)
@@ -422,6 +448,30 @@ public static class ZombieSpawner
 			return null;
 		}
 		return Object.Instantiate<GameObject>(localZombiePrefab, position, rotation);
+	}
+
+	internal static void InitializeSpawnedZombieRuntime(GameObject zombieObj)
+	{
+		if ((Object)zombieObj == (Object)null)
+		{
+			return;
+		}
+		try
+		{
+			Character component = zombieObj.GetComponent<Character>() ?? zombieObj.GetComponentInParent<Character>() ?? zombieObj.GetComponentInChildren<Character>(true);
+			if ((Object)component != (Object)null)
+			{
+				component.isZombie = true;
+			}
+			CharacterStats componentInChildren = zombieObj.GetComponentInChildren<CharacterStats>(true);
+			if ((Object)componentInChildren != (Object)null && !componentInChildren.IsInitialized)
+			{
+				componentInChildren.Initialize();
+			}
+		}
+		catch (Exception)
+		{
+		}
 	}
 
 	private static GameObject ResolveLocalZombiePrefab()
@@ -715,12 +765,42 @@ public static class ZombieSpawner
 		}
 		foreach (Character allCharacter in Character.AllCharacters)
 		{
-			if ((Object)allCharacter != (Object)null && !allCharacter.isBot && !allCharacter.isZombie)
+			if (IsSpawnTargetCandidate(allCharacter))
 			{
 				buffer.Add(allCharacter);
 			}
 		}
 		return buffer.Count;
+	}
+
+	private static bool IsSpawnTargetCandidate(Character character)
+	{
+		if ((Object)character == (Object)null || character.isBot || character.isZombie)
+		{
+			return false;
+		}
+		if ((Object)((Component)character).gameObject == (Object)null || !((Component)character).gameObject.scene.IsValid())
+		{
+			return false;
+		}
+		try
+		{
+			if (character.data == null || character.data.dead || character.data.passedOut || character.data.fullyPassedOut || character.warping)
+			{
+				return false;
+			}
+			Vector3 center = character.Center;
+			return IsFiniteVector(center);
+		}
+		catch (Exception)
+		{
+			return false;
+		}
+	}
+
+	private static bool IsFiniteVector(Vector3 value)
+	{
+		return !float.IsNaN(value.x) && !float.IsNaN(value.y) && !float.IsNaN(value.z) && !float.IsInfinity(value.x) && !float.IsInfinity(value.y) && !float.IsInfinity(value.z);
 	}
 
 	private static float GetNextSpawnDelay(bool firstWave = false)

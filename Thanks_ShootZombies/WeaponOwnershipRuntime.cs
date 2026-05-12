@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -8,6 +9,48 @@ namespace ShootZombies;
 
 public partial class Plugin
 {
+	private struct WeaponItemUiInteractionState
+	{
+		public bool HasDisplayState;
+
+		public string ItemName;
+
+		public Texture2D Icon;
+
+		public Texture2D AltIcon;
+
+		public bool CanDrop;
+
+		public bool CanThrow;
+
+		public bool CanBackpack;
+	}
+
+	private static readonly Dictionary<ItemUIData, WeaponItemUiInteractionState> _weaponItemUiInteractionStateByData = new Dictionary<ItemUIData, WeaponItemUiInteractionState>();
+
+	internal static void CaptureWeaponItemUiDisplayState(ItemUIData uiData)
+	{
+		if (uiData == null)
+		{
+			return;
+		}
+		if (_weaponItemUiInteractionStateByData.TryGetValue(uiData, out var value) && value.HasDisplayState)
+		{
+			return;
+		}
+		value = _weaponItemUiInteractionStateByData.TryGetValue(uiData, out value) ? value : new WeaponItemUiInteractionState
+		{
+			CanDrop = uiData.canDrop,
+			CanThrow = uiData.canThrow,
+			CanBackpack = uiData.canBackpack
+		};
+		value.HasDisplayState = true;
+		value.ItemName = uiData.itemName;
+		value.Icon = uiData.icon;
+		value.AltIcon = uiData.altIcon;
+		_weaponItemUiInteractionStateByData[uiData] = value;
+	}
+
 	internal static bool TryProtectWeaponItemRuntime(Item item)
 	{
 		if (!IsWeaponFeatureEnabled() || (Object)item == (Object)null || !ItemPatch.IsBlowgunLike(item))
@@ -22,15 +65,71 @@ public partial class Plugin
 		return true;
 	}
 
-	private static void ApplyWeaponItemInteractionRestrictions(ItemUIData uiData)
+	internal static void ApplyWeaponItemInteractionRestrictions(ItemUIData uiData)
 	{
 		if (uiData == null)
 		{
 			return;
 		}
+		if (!_weaponItemUiInteractionStateByData.ContainsKey(uiData))
+		{
+			_weaponItemUiInteractionStateByData[uiData] = new WeaponItemUiInteractionState
+			{
+				CanDrop = uiData.canDrop,
+				CanThrow = uiData.canThrow,
+				CanBackpack = uiData.canBackpack
+			};
+		}
 		uiData.canDrop = false;
 		uiData.canThrow = false;
 		uiData.canBackpack = false;
+	}
+
+	private static void RestoreWeaponItemInteractionRestrictions(ItemUIData uiData)
+	{
+		if (uiData == null)
+		{
+			return;
+		}
+		if (_weaponItemUiInteractionStateByData.TryGetValue(uiData, out var value))
+		{
+			if (value.HasDisplayState)
+			{
+				uiData.itemName = value.ItemName;
+				uiData.icon = value.Icon;
+				uiData.altIcon = value.AltIcon;
+			}
+			uiData.canDrop = value.CanDrop;
+			uiData.canThrow = value.CanThrow;
+			uiData.canBackpack = value.CanBackpack;
+			return;
+		}
+		uiData.canDrop = true;
+		uiData.canThrow = true;
+		uiData.canBackpack = true;
+	}
+
+	internal static void RestoreWeaponItemInteractionRestrictionsOnAllBlowguns()
+	{
+		try
+		{
+			Item[] array = Resources.FindObjectsOfTypeAll<Item>();
+			foreach (Item item in array)
+			{
+				if ((Object)item == (Object)null || !BlowgunInfiniteUsePatch.IsBlowgunItem(item))
+				{
+					continue;
+				}
+				RestoreWeaponItemInteractionRestrictions(item.UIData);
+				if ((Object)item.isSecretlyOtherItemPrefab != (Object)null)
+				{
+					RestoreWeaponItemInteractionRestrictions(item.isSecretlyOtherItemPrefab.UIData);
+				}
+			}
+		}
+		catch
+		{
+		}
 	}
 
 	internal static bool IsProtectedWeaponItem(Item item)

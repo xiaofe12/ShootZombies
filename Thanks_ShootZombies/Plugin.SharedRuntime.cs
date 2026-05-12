@@ -274,6 +274,14 @@ public partial class Plugin
 		_observedConfigEntries.Clear();
 	}
 
+	private void OnOwnedConfigEntryChanged(object sender, EventArgs args)
+	{
+		if (!_applyingRoomConfigPayload && HasOnlineRoomSession() && PhotonNetwork.IsMasterClient)
+		{
+			MarkRoomConfigDirty(forceImmediate: true);
+		}
+	}
+
 	private static void ApplyBoolRoomConfig(IReadOnlyDictionary<string, string> values, string key, ConfigEntry<bool> entry)
 	{
 		if (entry != null && values.TryGetValue(key, out var value))

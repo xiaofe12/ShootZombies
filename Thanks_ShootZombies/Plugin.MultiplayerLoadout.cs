@@ -45,22 +45,30 @@ public partial class Plugin
 							continue;
 						}
 						int ownerActorNr = GetCharacterGrantTrackingId(allCharacter);
-						if (ownerActorNr == int.MinValue)
+						int firstAidGrantTrackingId = GetFirstAidGrantTrackingId(allCharacter);
+						if (ownerActorNr == int.MinValue && firstAidGrantTrackingId == int.MinValue)
 						{
 							continue;
 						}
-						bool flag2 = IsAlive(allCharacter);
-						bool flag4 = HasWeaponGrantRecord(ownerActorNr);
-						bool flag5 = HasFirstAidGrantRecord(ownerActorNr);
-						if (!flag2 || (flag4 && flag5))
+						if (!IsLoadoutGrantEligible(allCharacter))
 						{
 							continue;
 						}
-						if (!flag5)
+						if (ownerActorNr != int.MinValue)
 						{
-							TryGrantFirstAidWithAuthority(allCharacter, ownerActorNr);
+							RepairMissingWeaponGrantRecord(allCharacter, ownerActorNr);
 						}
-						if (!flag4)
+						bool flag4 = ownerActorNr != int.MinValue && HasWeaponGrantRecord(ownerActorNr);
+						bool flag5 = firstAidGrantTrackingId != int.MinValue && HasFirstAidGrantRecord(firstAidGrantTrackingId);
+						if (flag4 && flag5)
+						{
+							continue;
+						}
+						if (!flag5 && firstAidGrantTrackingId != int.MinValue)
+						{
+							TryGrantFirstAidWithAuthority(allCharacter, firstAidGrantTrackingId);
+						}
+						if (!flag4 && ownerActorNr != int.MinValue)
 						{
 							TryGrantWeaponWithAuthority(allCharacter, ownerActorNr);
 						}
@@ -146,6 +154,31 @@ public partial class Plugin
 		return val.IsMine || val.OwnerActorNr <= 0;
 	}
 
+	private static bool IsLoadoutGrantEligible(Character c)
+	{
+		if ((Object)c == (Object)null || c.isBot || c.isZombie)
+		{
+			return false;
+		}
+		try
+		{
+			CharacterData data = c.data;
+			if ((Object)data != (Object)null && (data.dead || data.passedOut || data.fullyPassedOut))
+			{
+				return false;
+			}
+			if (c.warping)
+			{
+				return false;
+			}
+			return true;
+		}
+		catch
+		{
+			return IsAlive(c);
+		}
+	}
+
 	private static bool IsAlive(Character c)
 	{
 		if ((Object)c == (Object)null)
@@ -181,6 +214,10 @@ public partial class Plugin
 				return false;
 			}
 			if ((Object)c == (Object)null || c.isBot || c.isZombie)
+			{
+				return false;
+			}
+			if (!IsLoadoutGrantEligible(c))
 			{
 				return false;
 			}
@@ -805,6 +842,10 @@ public partial class Plugin
 			{
 				return false;
 			}
+			if (!IsLoadoutGrantEligible(c))
+			{
+				return false;
+			}
 			Player player = c.player;
 			if ((Object)player == (Object)null || player.itemSlots == null)
 			{
@@ -964,14 +1005,21 @@ public partial class Plugin
 		{
 			return;
 		}
-		_recentWeaponDropTimeByActor[characterGrantTrackingId] = Time.unscaledTime;
+		if (ShouldSuppressWeaponRegrantAfterDrop(c))
+		{
+			_recentWeaponDropTimeByActor[characterGrantTrackingId] = Time.unscaledTime;
+		}
+		else
+		{
+			_recentWeaponDropTimeByActor.Remove(characterGrantTrackingId);
+		}
 		_weaponMissingSinceByActor.Remove(characterGrantTrackingId);
 		_pendingRemoteWeaponGrantActors.Remove(characterGrantTrackingId);
 	}
 
 	private static void MarkFirstAidGrantedForCharacter(Character c)
 	{
-		int characterGrantTrackingId = GetCharacterGrantTrackingId(c);
+		int characterGrantTrackingId = GetFirstAidGrantTrackingId(c);
 		if (characterGrantTrackingId == int.MinValue)
 		{
 			return;
@@ -985,7 +1033,6 @@ public partial class Plugin
 		_persistentReceivedFirstAid.Add(actorNr);
 		_pendingRemoteFirstAidGrantActors.Remove(actorNr);
 		_lastFirstAidGrantTimeByActor[actorNr] = Time.unscaledTime;
-		_firstAidMissingSinceByActor.Remove(actorNr);
 	}
 
 	private static bool HasWeaponGrantRecord(int actorNr)
@@ -1005,6 +1052,27 @@ public partial class Plugin
 		}
 		_recentWeaponDropTimeByActor.Remove(actorNr);
 		return false;
+	}
+
+	private static bool ShouldSuppressWeaponRegrantAfterDrop(Character c)
+	{
+		if ((Object)c == (Object)null)
+		{
+			return true;
+		}
+		try
+		{
+			CharacterData data = c.data;
+			if ((Object)data != (Object)null && (data.dead || data.passedOut || data.fullyPassedOut))
+			{
+				return false;
+			}
+			return true;
+		}
+		catch
+		{
+			return true;
+		}
 	}
 
 	private static bool HasFirstAidGrantRecord(int actorNr)
@@ -1049,27 +1117,12 @@ public partial class Plugin
 		_weaponMissingSinceByActor.Remove(actorNr);
 	}
 
-	private static void ClearFirstAidGrantRecordForActor(int actorNr)
-	{
-		_receivedFirstAid.Remove(actorNr);
-		_persistentReceivedFirstAid.Remove(actorNr);
-		_pendingRemoteFirstAidGrantActors.Remove(actorNr);
-		_lastFirstAidGrantTimeByActor.Remove(actorNr);
-		_firstAidMissingSinceByActor.Remove(actorNr);
-	}
-
-	private static void RepairMissingLoadoutGrantRecords(Character c, int actorNr)
+	private static void RepairMissingWeaponGrantRecord(Character c, int actorNr)
 	{
 		if (actorNr == int.MinValue || (Object)c == (Object)null || c.isBot || c.isZombie)
 		{
 			return;
 		}
-		RepairMissingWeaponGrantRecord(c, actorNr);
-		RepairMissingFirstAidGrantRecord(c, actorNr);
-	}
-
-	private static void RepairMissingWeaponGrantRecord(Character c, int actorNr)
-	{
 		if (!HasWeaponGrantRecord(actorNr) || IsPendingRemoteWeaponGrant(actorNr))
 		{
 			_weaponMissingSinceByActor.Remove(actorNr);
@@ -1097,33 +1150,6 @@ public partial class Plugin
 		if (Time.unscaledTime - value2 >= LoadoutMissingConfirmDuration)
 		{
 			ClearWeaponGrantRecordForActor(actorNr);
-		}
-	}
-
-	private static void RepairMissingFirstAidGrantRecord(Character c, int actorNr)
-	{
-		if (!HasFirstAidGrantRecord(actorNr) || IsPendingRemoteFirstAidGrant(actorNr))
-		{
-			_firstAidMissingSinceByActor.Remove(actorNr);
-			return;
-		}
-		if (CharacterAlreadyHasFirstAid(c))
-		{
-			_firstAidMissingSinceByActor.Remove(actorNr);
-			return;
-		}
-		if (_lastFirstAidGrantTimeByActor.TryGetValue(actorNr, out var value) && Time.unscaledTime - value < LoadoutRepairGracePeriod)
-		{
-			return;
-		}
-		if (!_firstAidMissingSinceByActor.TryGetValue(actorNr, out var value2))
-		{
-			_firstAidMissingSinceByActor[actorNr] = Time.unscaledTime;
-			return;
-		}
-		if (Time.unscaledTime - value2 >= LoadoutMissingConfirmDuration)
-		{
-			ClearFirstAidGrantRecordForActor(actorNr);
 		}
 	}
 
@@ -1289,6 +1315,10 @@ public partial class Plugin
 		{
 			return;
 		}
+		if (!IsLoadoutGrantEligible(val))
+		{
+			return;
+		}
 		Player player = val.player;
 		if ((Object)player == (Object)null || player.itemSlots == null)
 		{
@@ -1312,30 +1342,66 @@ public partial class Plugin
 		{
 			return int.MinValue;
 		}
-		if ((Object)(c.refs?.view) != (Object)null && c.refs.view.OwnerActorNr != 0)
+		PhotonView val = c.refs?.view;
+		if ((Object)val != (Object)null && val.OwnerActorNr > 0)
 		{
-			return c.refs.view.OwnerActorNr;
+			return val.OwnerActorNr;
 		}
 		Player player = c.player;
-		if (!HasOnlineRoomSession())
+		if (HasOnlineRoomSession())
 		{
-			if ((Object)player != (Object)null)
+			if ((Object)c == (Object)Character.localCharacter || (Object)c == (Object)_localCharacter || ((Object)val != (Object)null && val.IsMine))
 			{
-				return -Mathf.Abs(((Object)player).GetInstanceID());
+				RoomPlayer localPlayer = PhotonNetwork.LocalPlayer;
+				if (localPlayer != null && localPlayer.ActorNumber > 0)
+				{
+					return localPlayer.ActorNumber;
+				}
+			}
+			return int.MinValue;
+		}
+		if ((Object)player != (Object)null)
+		{
+			return -Mathf.Abs(((Object)player).GetInstanceID());
+		}
+		if ((Object)c == (Object)Character.localCharacter || (Object)c == (Object)_localCharacter)
+		{
+			return -Mathf.Abs(((Object)c).GetInstanceID());
+		}
+		return int.MinValue;
+	}
+
+	private static int GetFirstAidGrantTrackingId(Character c)
+	{
+		if ((Object)c == (Object)null || c.isBot || c.isZombie)
+		{
+			return int.MinValue;
+		}
+		if (HasOnlineRoomSession())
+		{
+			int characterGrantTrackingId = GetCharacterGrantTrackingId(c);
+			if (characterGrantTrackingId != int.MinValue)
+			{
+				return characterGrantTrackingId;
 			}
 			if ((Object)c == (Object)Character.localCharacter || (Object)c == (Object)_localCharacter)
 			{
-				return -Mathf.Abs(((Object)c).GetInstanceID());
+				RoomPlayer localPlayer = PhotonNetwork.LocalPlayer;
+				if (localPlayer != null && localPlayer.ActorNumber > 0)
+				{
+					return localPlayer.ActorNumber;
+				}
 			}
 			return int.MinValue;
 		}
 		if ((Object)c == (Object)Character.localCharacter || (Object)c == (Object)_localCharacter)
 		{
-			if ((Object)player != (Object)null)
-			{
-				return -Mathf.Abs(((Object)player).GetInstanceID());
-			}
-			return -Mathf.Abs(((Object)c).GetInstanceID());
+			return -1;
+		}
+		Player player = c.player;
+		if ((Object)player != (Object)null)
+		{
+			return -Mathf.Abs(((Object)player).GetInstanceID());
 		}
 		return int.MinValue;
 	}
@@ -1701,6 +1767,19 @@ public partial class Plugin
 		}
 	}
 
+	private void MarkRoomConfigDirtyIfPublishedPayloadChanged()
+	{
+		if (_applyingRoomConfigPayload || !HasOnlineRoomSession() || !PhotonNetwork.IsMasterClient)
+		{
+			return;
+		}
+		string text = BuildRoomConfigPayload();
+		if (!string.IsNullOrWhiteSpace(text) && !string.Equals(text, _lastPublishedRoomConfigPayload, StringComparison.Ordinal))
+		{
+			MarkRoomConfigDirty(forceImmediate: true);
+		}
+	}
+
 	private void CaptureLocalRoomConfigBackupIfNeeded()
 	{
 		if (!_hasLocalRoomConfigBackup)
@@ -1963,7 +2042,6 @@ public partial class Plugin
 		PruneGrantTrackingDictionary(_lastWeaponGrantTimeByActor, hashSet);
 		PruneGrantTrackingDictionary(_lastFirstAidGrantTimeByActor, hashSet);
 		PruneGrantTrackingDictionary(_weaponMissingSinceByActor, hashSet);
-		PruneGrantTrackingDictionary(_firstAidMissingSinceByActor, hashSet);
 		PruneGrantTrackingDictionary(_recentWeaponDropTimeByActor, hashSet);
 	}
 

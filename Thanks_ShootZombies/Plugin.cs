@@ -27,7 +27,7 @@ using RoomPlayer = Photon.Realtime.Player;
 
 namespace ShootZombies;
 
-[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.5")]
+[BepInPlugin("com.github.Thanks.ShootZombies", "ShootZombies", "1.3.6")]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Core", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.Items", BepInDependency.DependencyFlags.HardDependency)]
 [BepInDependency("com.github.PEAKModding.PEAKLib.ModConfig", BepInDependency.DependencyFlags.SoftDependency)]
@@ -252,7 +252,7 @@ public partial class Plugin : BaseUnityPlugin
 
 	public const string Name = "ShootZombies";
 
-	public const string Version = "1.3.5";
+	public const string Version = "1.3.6";
 
 	private const string CanonicalConfigFileName = "Thanks.ShootZombies.cfg";
 
@@ -291,8 +291,6 @@ public partial class Plugin : BaseUnityPlugin
 	private static Dictionary<int, float> _lastFirstAidGrantTimeByActor = new Dictionary<int, float>();
 
 	private static Dictionary<int, float> _weaponMissingSinceByActor = new Dictionary<int, float>();
-
-	private static Dictionary<int, float> _firstAidMissingSinceByActor = new Dictionary<int, float>();
 
 	private static Dictionary<int, float> _recentWeaponDropTimeByActor = new Dictionary<int, float>();
 
@@ -506,8 +504,6 @@ public partial class Plugin : BaseUnityPlugin
 	private static Type _actionConsumeType;
 
 	private static Type _actionConsumeAndSpawnType;
-
-	private static MethodInfo _rpcDartImpactMethod;
 
 	private static MethodInfo _characterAddForceMethod;
 

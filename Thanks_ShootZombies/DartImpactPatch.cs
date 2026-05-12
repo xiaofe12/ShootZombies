@@ -75,6 +75,8 @@ public static class DartImpactPatch
 					}
 				}
 			}
+			Plugin.HandleZombieDartImpactVisual((Component)(object)__instance, endpoint);
+			return false;
 		}
 		catch (Exception ex)
 		{
@@ -118,9 +120,14 @@ public static class LocalDartImpactPatch
 		try
 		{
 			Item componentInParent = ((Component)__instance).GetComponentInParent<Item>();
-			if (!Plugin.IsWeaponFeatureEnabled() || (Object)componentInParent == (Object)null || !ItemPatch.IsBlowgunLike(componentInParent) || (Object)hitCharacter == (Object)null)
+			if (!Plugin.IsWeaponFeatureEnabled() || (Object)componentInParent == (Object)null || !ItemPatch.IsBlowgunLike(componentInParent))
 			{
 				return true;
+			}
+			if ((Object)hitCharacter == (Object)null)
+			{
+				Plugin.HandleZombieDartImpactVisual((Component)(object)__instance, endpoint);
+				return false;
 			}
 			if (hitCharacter.isZombie || hitCharacter.isBot)
 			{
@@ -128,6 +135,7 @@ public static class LocalDartImpactPatch
 				Plugin.Instance?.HitZombie(hitCharacter, origin);
 				return false;
 			}
+			Plugin.HandleZombieDartImpactVisual((Component)(object)__instance, endpoint);
 			return false;
 		}
 		catch (Exception ex)
@@ -137,4 +145,3 @@ public static class LocalDartImpactPatch
 		return true;
 	}
 }
-

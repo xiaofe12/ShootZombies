@@ -66,7 +66,7 @@ public class BlowgunInfiniteUsePatch
 	{
 		try
 		{
-			Item[] array = UnityEngine.Object.FindObjectsByType<Item>((FindObjectsSortMode)0);
+			Item[] array = Resources.FindObjectsOfTypeAll<Item>();
 			foreach (Item item in array)
 			{
 				RestoreVanillaSingleUse(item);
@@ -93,7 +93,7 @@ public class BlowgunInfiniteUsePatch
 		}
 	}
 
-	private static void RestoreVanillaSingleUse(Item item)
+	internal static void RestoreVanillaSingleUse(Item item)
 	{
 		try
 		{
@@ -147,6 +147,22 @@ public class BlowgunInfiniteUsePatch
 			NormalizeRaycastDartComponents(item);
 			NormalizeRaycastDartComponents(item.isSecretlyOtherItemPrefab);
 			DisableConsumableActions(item);
+		}
+		catch
+		{
+		}
+	}
+
+	internal static void NormalizeDartRpcComponents(Item item)
+	{
+		try
+		{
+			if ((Object)item == (Object)null || !ItemPatch.IsBlowgunLike(item))
+			{
+				return;
+			}
+			NormalizeRaycastDartComponents(item);
+			NormalizeRaycastDartComponents(item.isSecretlyOtherItemPrefab);
 		}
 		catch
 		{

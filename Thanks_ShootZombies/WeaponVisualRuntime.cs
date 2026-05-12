@@ -1186,6 +1186,7 @@ public static partial class ItemPatch
 		{
 			return;
 		}
+		Plugin.CaptureWeaponItemUiDisplayState(uiData);
 		string weaponSelectionForItem = Plugin.GetWeaponSelectionForItem(item);
 		uiData.itemName = Plugin.GetWeaponDisplayName(weaponSelectionForItem);
 		Texture2D akIconTexture = Plugin.GetAkIconTexture(weaponSelectionForItem);
@@ -1197,9 +1198,7 @@ public static partial class ItemPatch
 				uiData.altIcon = akIconTexture;
 			}
 		}
-		uiData.canDrop = false;
-		uiData.canThrow = false;
-		uiData.canBackpack = false;
+		Plugin.ApplyWeaponItemInteractionRestrictions(uiData);
 	}
 
 	private static Transform ResolveTargetVisualRoot(Item item)

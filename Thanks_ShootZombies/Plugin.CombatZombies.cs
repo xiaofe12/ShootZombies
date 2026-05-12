@@ -610,46 +610,13 @@ public partial class Plugin
 			{
 				return false;
 			}
-			if (_rpcDartImpactMethod == null || _rpcDartImpactMethod.DeclaringType != ((object)val).GetType())
+			if ((Object)hitCharacter != (Object)null && (hitCharacter.isZombie || hitCharacter.isBot))
 			{
-				_rpcDartImpactMethod = ((object)val).GetType().GetMethods(BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic).FirstOrDefault(delegate(MethodInfo method)
-				{
-					if (!string.Equals(method.Name, "RPC_DartImpact", StringComparison.Ordinal))
-					{
-						return false;
-					}
-					ParameterInfo[] parameters3 = method.GetParameters();
-					if (parameters3.Length != 3 && parameters3.Length != 4)
-					{
-						return false;
-					}
-					return parameters3[0].ParameterType == typeof(int) && parameters3[1].ParameterType == typeof(Vector3) && parameters3[2].ParameterType == typeof(Vector3);
-				});
+				HandleZombieDartImpactVisual(val, hit.point);
+				Instance?.HitZombie(hitCharacter, origin);
+				return true;
 			}
-			if (_rpcDartImpactMethod == null)
-			{
-				TrySpawnDartVfxFromAction(val, hit.point);
-				return false;
-			}
-			int num = -1;
-			if ((Object)hitCharacter != (Object)null && (Object)((MonoBehaviourPun)hitCharacter).photonView != (Object)null)
-			{
-				num = ((MonoBehaviourPun)hitCharacter).photonView.ViewID;
-			}
-			ParameterInfo[] parameters = _rpcDartImpactMethod.GetParameters();
-			object[] parameters2 = ((parameters.Length != 4) ? new object[3]
-			{
-				num,
-				origin,
-				hit.point
-			} : new object[4]
-			{
-				num,
-				origin,
-				hit.point,
-				Activator.CreateInstance(parameters[3].ParameterType)
-			});
-			_rpcDartImpactMethod.Invoke(val, parameters2);
+			TrySpawnDartVfxFromAction(val, hit.point);
 			return true;
 		}
 		catch (Exception ex)

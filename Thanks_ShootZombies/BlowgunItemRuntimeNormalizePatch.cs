@@ -30,6 +30,12 @@ public static class BlowgunItemRuntimeNormalizePatch
 
 	private static void Postfix(Item __instance)
 	{
+		BlowgunInfiniteUsePatch.NormalizeDartRpcComponents(__instance);
+		if (!Plugin.IsWeaponFeatureEnabled())
+		{
+			BlowgunInfiniteUsePatch.RestoreVanillaSingleUse(__instance);
+			return;
+		}
 		BlowgunInfiniteUsePatch.EnsureInfiniteUse(__instance);
 		Plugin.TryProtectWeaponItemRuntime(__instance);
 	}

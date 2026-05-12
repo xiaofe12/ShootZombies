@@ -200,6 +200,7 @@ public partial class Plugin
 		{
 			ZombieSpawner.RefreshLiveZombieProperties();
 		}
+		MarkRoomConfigDirtyIfPublishedPayloadChanged();
 	}
 
 	private void RemoveLegacyInventorySlotConfig()
